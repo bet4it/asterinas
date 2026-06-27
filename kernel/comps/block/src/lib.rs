@@ -149,6 +149,12 @@ pub fn lookup(id: DeviceId) -> Option<Arc<dyn BlockDevice>> {
     DEVICE_REGISTRY.lock().get(&id.to_raw()).cloned()
 }
 
+/// Re-reads the partition table of the block device.
+pub fn reread_partitions(device: &Arc<dyn BlockDevice>) {
+    let partition_info = partition::parse(device).unwrap_or_default();
+    device.set_partitions(partition_info);
+}
+
 static DEVICE_REGISTRY: Mutex<BTreeMap<u32, Arc<dyn BlockDevice>>> = Mutex::new(BTreeMap::new());
 
 #[init_component]
