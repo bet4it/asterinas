@@ -24,25 +24,13 @@
     hashedPassword = null;
   };
 
-  systemd.services.asterinas-console-shell = lib.mkIf (config.aster_nixos.console == "hvc0") {
-    after = [ "multi-user.target" ];
-    wantedBy = [ "multi-user.target" ];
-    # Asterinas exposes hvc0 as the system console, but not as a full Linux tty.
-    # Open it as a console file so `make run_nixos` still gets an interactive root shell.
-    serviceConfig = {
-      ExecStart = "${pkgs.bashInteractive}/bin/bash -li";
-      Restart = "always";
-      StandardInput = "file:/dev/console";
-      StandardOutput = "file:/dev/console";
-      StandardError = "file:/dev/console";
-    };
-  };
-
   systemd.targets.getty.wants = lib.mkForce (
     # tty1: provide text login on the virtual console when X server is disabled.
-    lib.optional (!config.services.xserver.enable && config.aster_nixos.console == "tty0")
-      "autovt@tty1.service"
-  );
+    (lib.optional
+      (!config.services.xserver.enable && config.aster_nixos.console == "tty0")
+      "autovt@tty1.service")
+    ++ lib.optional (config.aster_nixos.console == "hvc0")
+    "getty@hvc0.service");
 
   systemd.settings.Manager = {
     LogLevel = "crit";
