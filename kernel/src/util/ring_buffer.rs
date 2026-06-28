@@ -71,6 +71,15 @@ pub trait ConsumerU8Ext {
     /// Returns the number of bytes read.
     fn read_fallible(&mut self, writer: &mut dyn MultiWrite) -> Result<usize>;
 
+    /// Peeks data from the ring buffer into `writer`.
+    ///
+    /// Returns the number of bytes read without consuming the data.
+    fn peek_fallible_with_max_len(
+        &mut self,
+        writer: &mut dyn MultiWrite,
+        max_len: usize,
+    ) -> Result<usize>;
+
     /// Reads up to `max_len` bytes from the ring buffer into `writer`.
     ///
     /// Returns the number of bytes read.
@@ -84,6 +93,35 @@ pub trait ConsumerU8Ext {
 impl<R: Deref<Target = RingBuffer<u8>>> ConsumerU8Ext for Consumer<u8, R> {
     fn read_fallible(&mut self, writer: &mut dyn MultiWrite) -> Result<usize> {
         self.read_fallible_with_max_len(writer, usize::MAX)
+    }
+
+    fn peek_fallible_with_max_len(
+        &mut self,
+        writer: &mut dyn MultiWrite,
+        max_len: usize,
+    ) -> Result<usize> {
+        let len = self.len().min(max_len);
+
+        let head = self.head();
+        let offset = head.0 & (self.capacity() - 1);
+
+        if offset + len > self.capacity() {
+            let mut read_len = 0;
+
+            let mut reader = self.segment().reader();
+            reader.skip(offset).limit(self.capacity() - offset);
+            read_len += writer.write(&mut reader)?;
+
+            let mut reader = self.segment().reader();
+            reader.limit(len - (self.capacity() - offset));
+            read_len += writer.write(&mut reader)?;
+
+            Ok(read_len)
+        } else {
+            let mut reader = self.segment().reader();
+            reader.skip(offset).limit(len);
+            Ok(writer.write(&mut reader)?)
+        }
     }
 
     fn read_fallible_with_max_len(

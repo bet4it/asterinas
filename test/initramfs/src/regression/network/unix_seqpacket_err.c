@@ -64,4 +64,41 @@ FN_TEST(send_recv_zero)
 }
 END_TEST()
 
+FN_TEST(recv_peek_trunc_probe)
+{
+	int fildes[2];
+	char buf[3];
+
+	TEST_SUCC(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fildes));
+
+	TEST_RES(send(fildes[0], "abc", 3, 0), _ret == 3);
+	TEST_RES(recv(fildes[1], NULL, 0, MSG_PEEK | MSG_TRUNC),
+		 _ret == 3);
+	TEST_RES(recv(fildes[1], buf, sizeof(buf), 0),
+		 _ret == 3 && memcmp(buf, "abc", 3) == 0);
+
+	TEST_SUCC(close(fildes[0]));
+	TEST_SUCC(close(fildes[1]));
+}
+END_TEST()
+
+FN_TEST(recv_trunc_returns_record_len)
+{
+	int fildes[2];
+	char buf[3] = {};
+
+	TEST_SUCC(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fildes));
+
+	TEST_RES(send(fildes[0], "abc", 3, 0), _ret == 3);
+	TEST_RES(send(fildes[0], "def", 3, 0), _ret == 3);
+	TEST_RES(recv(fildes[1], buf, 1, MSG_TRUNC),
+		 _ret == 3 && buf[0] == 'a');
+	TEST_RES(recv(fildes[1], buf, sizeof(buf), 0),
+		 _ret == 3 && memcmp(buf, "def", 3) == 0);
+
+	TEST_SUCC(close(fildes[0]));
+	TEST_SUCC(close(fildes[1]));
+}
+END_TEST()
+
 #include "unix_streamlike_epilogue.h"

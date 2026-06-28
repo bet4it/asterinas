@@ -14,7 +14,7 @@ use crate::{
         unix::{
             UnixSocketAddr, addr::UnixSocketAddrBound, cred::SocketCred, ctrl_msg::AuxiliaryData,
         },
-        util::{ControlMessage, SockShutdownCmd},
+        util::{ControlMessage, SendRecvFlags, SockShutdownCmd},
     },
     prelude::*,
     process::signal::Pollee,
@@ -117,6 +117,7 @@ impl Connected {
         &self,
         writer: &mut dyn MultiWrite,
         is_seqpacket: bool,
+        flags: SendRecvFlags,
     ) -> Result<(usize, Vec<ControlMessage>)> {
         let is_empty = writer.is_empty();
         if is_empty && !is_seqpacket {
@@ -135,12 +136,18 @@ impl Connected {
         let no_aux_len = reader.len();
 
         let is_pass_cred = this_end.is_pass_cred.load(Ordering::Relaxed);
+        let should_peek = flags.contains(SendRecvFlags::MSG_PEEK);
+        let should_return_record_len = is_seqpacket && flags.contains(SendRecvFlags::MSG_TRUNC);
 
         // Fast path: There are no auxiliary data to receive.
         if !peer_end.has_aux.load(Ordering::Relaxed) {
-            let read_len = self
-                .inner
-                .read_with(move || reader.read_fallible_with_max_len(writer, no_aux_len))?;
+            let read_len = self.inner.read_with(move || {
+                if should_peek {
+                    reader.peek_fallible_with_max_len(writer, no_aux_len)
+                } else {
+                    reader.read_fallible_with_max_len(writer, no_aux_len)
+                }
+            })?;
             let ctrl_msgs = if is_pass_cred {
                 AuxiliaryData::default().generate_control(is_pass_cred)
             } else {
@@ -150,6 +157,54 @@ impl Connected {
         }
 
         let mut all_aux = peer_end.all_aux.lock();
+
+        if is_seqpacket {
+            let read_start = reader.head();
+            let (record_len, peeked_ctrl_msgs) = {
+                let front = all_aux
+                    .front()
+                    .ok_or_else(|| Error::with_message(Errno::EAGAIN, "the channel is empty"))?;
+                debug_assert_eq!(front.start, read_start);
+
+                let ctrl_msgs =
+                    should_peek.then(|| front.data.generate_control_cloned(is_pass_cred));
+                ((front.end - read_start).0, ctrl_msgs)
+            };
+
+            let read_len = if !is_empty && record_len > 0 {
+                self.inner.read_with(|| {
+                    if should_peek {
+                        reader.peek_fallible_with_max_len(writer, record_len)
+                    } else {
+                        reader.read_fallible_with_max_len(writer, record_len)
+                    }
+                })?
+            } else {
+                0
+            };
+
+            let ctrl_msgs = if let Some(ctrl_msgs) = peeked_ctrl_msgs {
+                ctrl_msgs
+            } else {
+                let mut aux_data = all_aux.pop_front().unwrap().data;
+                if read_len < record_len {
+                    reader.skip(record_len - read_len);
+                }
+                peer_end
+                    .has_aux
+                    .store(!all_aux.is_empty(), Ordering::Relaxed);
+                aux_data.generate_control(is_pass_cred)
+            };
+
+            let received_len = if should_return_record_len {
+                record_len
+            } else {
+                read_len
+            };
+
+            return Ok((received_len, ctrl_msgs));
+        }
+
         let mut aux_prev_data: Option<AuxiliaryData> = None;
         let mut read_tot_len = 0;
 
@@ -194,14 +249,7 @@ impl Connected {
 
             // Record the current auxiliary data. Break if the read is incomplete or this is a
             // `SOCK_SEQPACKET` socket.
-            if is_seqpacket {
-                aux_prev_data = Some(all_aux.pop_front().unwrap().data);
-                if read_len < aux_len {
-                    warn!("setting MSG_TRUNC is not supported");
-                    reader.skip(aux_len - read_len);
-                }
-                break aux_prev_data.as_mut().unwrap();
-            } else if let Some(front) = aux_front {
+            if let Some(front) = aux_front {
                 if read_len < aux_len {
                     front.start += read_len;
                     break &mut front.data;
