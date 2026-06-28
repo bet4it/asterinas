@@ -3,9 +3,8 @@ final: prev: {
     patches = (old.patches or [ ]) ++ [
       ./0001-Skip-mount-state-checking.patch
       ./0002-Disable-loop-too-fast-warning.patch
-      ./0003-Switch-MS_SLAVE-to-MS_PRIVATE.patch
-      ./0004-Fallback-from-pidfd_spawn-to-posix_spawn.patch
-      ./0005-Keep-PID1-standard-streams-on-console.patch
+      ./0003-Fallback-from-pidfd_spawn-to-posix_spawn.patch
+      ./0004-Keep-PID1-standard-streams-on-console.patch
     ];
 
     postInstall = ''
