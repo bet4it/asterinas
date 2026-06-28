@@ -70,6 +70,9 @@ mod ioctl_defs {
 
     // Reference: <https://elixir.bootlin.com/linux/v6.18/source/include/uapi/linux/fs.h>
 
+    /// Returns the device size in 512-byte sectors.
+    pub(super) type BlkGetSize = ioc!(BLKGETSIZE, 0x1260, OutData<u64>);
+
     /// Returns the device size in bytes.
     pub(super) type BlkGetSize64 = ioc!(BLKGETSIZE64, 0x12, 114, OutData<u64>);
 
@@ -87,6 +90,15 @@ mod ioctl_defs {
     /// ioctl must return that larger value. Otherwise user programs will align
     /// correctly for the device but still hit `EINVAL` at the filesystem.
     pub(super) type BlkGetSectorSize = ioc!(BLKSSZGET, 0x12, 104, NoData);
+
+    /// Re-reads the partition table.
+    pub(super) type BlkRrPart = ioc!(BLKRRPART, 0x12, 95, NoData);
+
+    /// Partition table modification.
+    pub(super) type BlkPg = ioc!(BLKPG, 0x12, 105, NoData);
+
+    /// Flushes buffers.
+    pub(super) type BlkFlsBuf = ioc!(BLKFLSBUF, 0x12, 97, NoData);
 }
 
 /// Represents a block device inode in the filesystem.
@@ -218,9 +230,25 @@ impl PerOpenFileOps for OpenBlockFile {
                 current_userspace!().write_val(raw_ioctl.arg(), &sector_size)?;
                 Ok(0)
             }
+            cmd @ BlkGetSize => {
+                let size = self.0.metadata().nr_sectors as u64;
+                cmd.write(&size)?;
+                Ok(0)
+            }
             cmd @ BlkGetSize64 => {
                 let size = (self.0.metadata().nr_sectors * SECTOR_SIZE) as u64;
                 cmd.write(&size)?;
+                Ok(0)
+            }
+            _cmd @ BlkRrPart => {
+                self.reread_and_register_partitions();
+                Ok(0)
+            }
+            _cmd @ BlkPg => {
+                self.reread_and_register_partitions();
+                Ok(0)
+            }
+            _cmd @ BlkFlsBuf => {
                 Ok(0)
             }
             _ => return_errno_with_message!(
@@ -228,6 +256,32 @@ impl PerOpenFileOps for OpenBlockFile {
                 "the ioctl command is not supported by block devices"
             ),
         })
+    }
+}
+
+impl OpenBlockFile {
+    /// Re-reads the partition table and registers any new partitions in devtmpfs.
+    fn reread_and_register_partitions(&self) {
+        aster_block::reread_partitions(&self.0);
+        if let Some(partitions) = self.0.partitions() {
+            let task = ostd::task::Task::current().unwrap();
+            let thread_local = task.as_thread_local().unwrap();
+            let fs_ref = thread_local.borrow_fs();
+            let path_resolver = fs_ref.resolver().read();
+
+            for partition in partitions {
+                let block_file = Arc::new(BlockFile::new(partition));
+                if let Some(devtmpfs_meta) = block_file.devtmpfs_meta() {
+                    let dev_id = block_file.0.id().as_encoded_u64();
+                    if let Err(e) =
+                        add_node(DeviceType::Block, dev_id, &devtmpfs_meta, &path_resolver)
+                        && e.error() != Errno::EEXIST
+                    {
+                        ostd::warn!("Failed to add partition node: {:?}", e);
+                    }
+                }
+            }
+        }
     }
 }
 
