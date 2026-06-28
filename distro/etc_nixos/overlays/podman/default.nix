@@ -3,7 +3,6 @@ final: prev: {
     patches = (oldAttrs.patches or [ ]) ++ [
       ./runc-Disable-creating-dev-mqueue.patch
       ./runc-Disable-eBPF-for-device-filtering.patch
-      ./runc-Disable-user-and-capability-setup-checks.patch
     ];
   });
   podman = (prev.podman.overrideAttrs (oldAttrs: {
