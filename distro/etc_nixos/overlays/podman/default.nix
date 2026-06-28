@@ -3,7 +3,6 @@ final: prev: {
     patches = oldAttrs.patches or [ ];
   });
   podman = (prev.podman.overrideAttrs (oldAttrs: {
-    patches = (oldAttrs.patches or [ ])
-      ++ [ ./Podman-Disable-etc-hosts-and-etc-resolv-conf-injection.patch ];
+    patches = oldAttrs.patches or [ ];
   })).override { runc = final.runc; };
 }

@@ -61,8 +61,8 @@ fn iface_to_new_addr(request_header: &CMsgSegHdr, iface: &Arc<Iface>) -> Option<
 
     let attrs = vec![
         AddrAttr::Address(ipv4_addr.octets()),
-        AddrAttr::Label(iface.name().to_owned()),
         AddrAttr::Local(ipv4_addr.octets()),
+        AddrAttr::Label(iface.name().to_owned()),
     ];
 
     Some(AddrSegment::new(header, addr_message, attrs))
