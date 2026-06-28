@@ -10,6 +10,7 @@ pub mod memfd;
 mod xattr;
 
 const RAMFS_MAGIC: u64 = 0x8584_58f6;
+const MQUEUE_MAGIC: u64 = 0x1980_0202;
 const BLOCK_SIZE: usize = 4096;
 const ROOT_INO: u64 = 1;
 const NAME_MAX: usize = 255;

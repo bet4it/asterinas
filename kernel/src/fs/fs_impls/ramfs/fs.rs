@@ -83,6 +83,12 @@ impl RamFs {
         Self::new_internal_with_sb("tmpfs", anon_device_id, sb)
     }
 
+    pub(in crate::fs) fn new_mqueue() -> Arc<Self> {
+        let anon_device_id = AnonDeviceId::acquire().expect("no device ID is available for mqueue");
+        let sb = SuperBlock::new(MQUEUE_MAGIC, BLOCK_SIZE, NAME_MAX, anon_device_id.id());
+        Self::new_internal_with_sb("mqueue", anon_device_id, sb)
+    }
+
     fn new_internal(name: &'static str) -> Arc<Self> {
         let anon_device_id = AnonDeviceId::acquire().expect("no device ID is available for ramfs");
         let sb = SuperBlock::new(RAMFS_MAGIC, BLOCK_SIZE, NAME_MAX, anon_device_id.id());

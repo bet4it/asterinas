@@ -9,6 +9,7 @@ pub mod configfs;
 pub mod devpts;
 pub mod exfat;
 pub mod ext2;
+mod mqueue;
 pub mod overlayfs;
 pub mod procfs;
 pub mod pseudofs;
@@ -23,6 +24,7 @@ pub(super) fn init() {
     cgroupfs::init();
     configfs::init();
     ramfs::init();
+    mqueue::init();
     tmpfs::init();
     devpts::init();
     pseudofs::init();

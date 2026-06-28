@@ -1,7 +1,6 @@
 final: prev: {
   runc = prev.runc.overrideAttrs (oldAttrs: {
     patches = (oldAttrs.patches or [ ]) ++ [
-      ./runc-Disable-creating-dev-mqueue.patch
       ./runc-Disable-eBPF-for-device-filtering.patch
     ];
   });
