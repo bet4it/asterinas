@@ -72,8 +72,7 @@ FN_TEST(recv_peek_trunc_probe)
 	TEST_SUCC(socketpair(AF_UNIX, SOCK_SEQPACKET, 0, fildes));
 
 	TEST_RES(send(fildes[0], "abc", 3, 0), _ret == 3);
-	TEST_RES(recv(fildes[1], NULL, 0, MSG_PEEK | MSG_TRUNC),
-		 _ret == 3);
+	TEST_RES(recv(fildes[1], NULL, 0, MSG_PEEK | MSG_TRUNC), _ret == 3);
 	TEST_RES(recv(fildes[1], buf, sizeof(buf), 0),
 		 _ret == 3 && memcmp(buf, "abc", 3) == 0);
 
