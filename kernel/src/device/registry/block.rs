@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use aster_block::{BLOCK_SIZE, BlockDevice, SECTOR_SIZE};
+use aster_block::{BlockDevice, SECTOR_SIZE};
 use aster_nvme::NvmeBlockDevice;
 use aster_virtio::device::block::device::BlockDevice as VirtIoBlockDevice;
 use device_id::DeviceId;
@@ -19,6 +19,20 @@ use crate::{
     thread::kernel_thread::ThreadOptions,
     util::ioctl::{RawIoctl, dispatch_ioctl},
 };
+
+/// Legacy Linux disk geometry returned by `HDIO_GETGEO`.
+///
+/// GRUB uses the `start` field to map Linux partition devices back to GRUB
+/// partitions when sysfs does not expose `/sys/dev/block/<major>:<minor>/start`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod)]
+struct HdGeometry {
+    heads: u8,
+    sectors: u8,
+    cylinders: u16,
+    _padding: u32,
+    start: u64,
+}
 
 pub(super) fn init_in_first_kthread() {
     for device in aster_block::collect_all() {
@@ -66,9 +80,15 @@ pub(super) fn init_in_first_process(path_resolver: &PathResolver) -> Result<()> 
 }
 
 mod ioctl_defs {
+    use super::HdGeometry;
     use crate::util::ioctl::{NoData, OutData, ioc};
 
     // Reference: <https://elixir.bootlin.com/linux/v6.18/source/include/uapi/linux/fs.h>
+
+    // Reference: <https://elixir.bootlin.com/linux/v6.18/source/include/uapi/linux/hdreg.h>
+
+    /// Returns legacy disk geometry.
+    pub(super) type HdIoGetGeo = ioc!(HDIO_GETGEO, 0x0301, OutData<HdGeometry>);
 
     /// Returns the device size in 512-byte sectors.
     pub(super) type BlkGetSize = ioc!(BLKGETSIZE, 0x1260, OutData<u64>);
@@ -80,15 +100,9 @@ mod ioctl_defs {
     ///
     /// This is the smallest unit of I/O the device can address and,
     /// importantly, the minimum alignment required for `O_DIRECT` I/O on
-    /// files backed by this device. Both buffer address and offset must be a
-    /// multiple of this value.
-    ///
-    /// Benchmarks and filesystem tests (for example, `xfstests`, LTP
-    /// `preadv03`/`pwritev03`) rely on this ioctl to size `O_DIRECT` buffers.
-    /// If the effective alignment enforced by the filesystem layered on top
-    /// is larger than the hardware sector, such as `ext2`'s 4 KiB block, this
-    /// ioctl must return that larger value. Otherwise user programs will align
-    /// correctly for the device but still hit `EINVAL` at the filesystem.
+    /// direct block-device I/O. Filesystems layered on top may enforce a
+    /// larger alignment for their own `O_DIRECT` operations, but that must not
+    /// change the logical sector size reported by the underlying block device.
     pub(super) type BlkGetSectorSize = ioc!(BLKSSZGET, 0x12, 104, NoData);
 
     /// Re-reads the partition table.
@@ -222,12 +236,13 @@ impl PerOpenFileOps for OpenBlockFile {
 
         dispatch_ioctl!(match raw_ioctl {
             _cmd @ BlkGetSectorSize => {
-                // TODO: Query the per-device logical block size once block device metadata
-                // exposes it. For now, report the effective minimum I/O granularity enforced
-                // by Asterinas filesystems so userspace can use `BLKSSZGET` for `O_DIRECT`
-                // alignment.
-                let sector_size = SECTOR_SIZE.max(BLOCK_SIZE) as i32;
+                // TODO: Query per-device logical sector size once block device metadata exposes it.
+                let sector_size = SECTOR_SIZE as i32;
                 current_userspace!().write_val(raw_ioctl.arg(), &sector_size)?;
+                Ok(0)
+            }
+            cmd @ HdIoGetGeo => {
+                cmd.write(&self.hd_geometry())?;
                 Ok(0)
             }
             cmd @ BlkGetSize => {
@@ -260,6 +275,25 @@ impl PerOpenFileOps for OpenBlockFile {
 }
 
 impl OpenBlockFile {
+    /// Collects legacy disk geometry for Linux-compatible tooling.
+    fn hd_geometry(&self) -> HdGeometry {
+        const HEADS: u8 = 255;
+        const SECTORS: u8 = 63;
+
+        let nr_sectors = u64::try_from(self.0.metadata().nr_sectors).unwrap_or(u64::MAX);
+        let sectors_per_cylinder = u64::from(HEADS) * u64::from(SECTORS);
+        let cylinders = nr_sectors / sectors_per_cylinder;
+        let cylinders = cylinders.min(u64::from(u16::MAX)) as u16;
+
+        HdGeometry {
+            heads: HEADS,
+            sectors: SECTORS,
+            cylinders,
+            _padding: 0,
+            start: self.0.partition_start_sector().unwrap_or(0),
+        }
+    }
+
     /// Re-reads the partition table and registers any new partitions in devtmpfs.
     fn reread_and_register_partitions(&self) {
         aster_block::reread_partitions(&self.0);

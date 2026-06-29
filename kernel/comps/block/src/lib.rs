@@ -79,6 +79,11 @@ pub trait BlockDevice: Send + Sync + Any + Debug {
         false
     }
 
+    /// Returns the partition start sector if the block device is a partition.
+    fn partition_start_sector(&self) -> Option<u64> {
+        None
+    }
+
     /// Sets the partitions of the block device.
     fn set_partitions(&self, _infos: Vec<Option<PartitionInfo>>) {}
 

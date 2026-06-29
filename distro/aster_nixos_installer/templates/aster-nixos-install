@@ -73,15 +73,6 @@ if [[ -z "$DISK" ]]; then
     exit 1
 fi
 
-# Confirm dangerous operation if --force-format-disk is used
-if [[ "$FORCE_FORMAT_DISK" == true ]]; then
-    echo "WARNING: You are about to FORMAT the disk: $DISK"
-    sgdisk --zap-all $DISK
-    partprobe $DISK
-fi
-
-BUILD_DIR=$(mktemp -d -p /mnt)
-
 if [ "${DISK#/dev/loop}" != "$DISK" ]; then
     BOOT_DEVICE="${DISK}p1"
     ROOT_DEVICE="${DISK}p2"
@@ -90,51 +81,80 @@ else
     ROOT_DEVICE="${DISK}2"
 fi
 
-partition_info() {
-    awk -v name="${1#/dev/}" '$4 == name {print $1, $2}' /proc/partitions
+reread_partition_table() {
+    sync
+    if command -v blockdev >/dev/null 2>&1; then
+        blockdev --rereadpt "${DISK}" 2>/dev/null && return 0
+    fi
+    if command -v partprobe >/dev/null 2>&1; then
+        partprobe "${DISK}" 2>/dev/null && return 0
+    fi
+    return 0
 }
 
+# Confirm dangerous operation if --force-format-disk is used
+if [[ "$FORCE_FORMAT_DISK" == true ]]; then
+    echo "WARNING: You are about to FORMAT the disk: $DISK"
+    rm -f "${BOOT_DEVICE}" "${ROOT_DEVICE}"
+    sgdisk --zap-all "${DISK}"
+    reread_partition_table
+fi
+
+BUILD_DIR=$(mktemp -d -p /mnt)
+
 partition_exists() {
-    [ -n "$(partition_info "$1")" ]
+    [ -b "$1" ]
+}
+
+create_partition_node_from_disk() {
+    DEVICE_PATH="$1"
+    PARTITION_INDEX="${DEVICE_PATH##*[!0-9]}"
+    if [ -z "${PARTITION_INDEX}" ] || [ ! -b "${DISK}" ]; then
+        return 1
+    fi
+    PARTITION_INDEX=$((10#${PARTITION_INDEX}))
+
+    DISK_MAJOR_HEX=$(stat -c '%t' "${DISK}")
+    DISK_MINOR_HEX=$(stat -c '%T' "${DISK}")
+    DEVICE_MAJOR=$((0x${DISK_MAJOR_HEX}))
+    DEVICE_MINOR=$((0x${DISK_MINOR_HEX} + PARTITION_INDEX))
+    rm -f "${DEVICE_PATH}"
+    mknod "${DEVICE_PATH}" b "${DEVICE_MAJOR}" "${DEVICE_MINOR}"
 }
 
 ensure_partition_device() {
     DEVICE_PATH="$1"
-    PARTITION_INFO=$(partition_info "${DEVICE_PATH}")
-    if [ -z "${PARTITION_INFO}" ]; then
-        echo "Error: Partition ${DEVICE_PATH} does not exist in /proc/partitions" >&2
-        exit 1
-    fi
-
-    set -- ${PARTITION_INFO}
-    EXPECTED_MAJOR=$(printf '%x' "$1")
-    EXPECTED_MINOR=$(printf '%x' "$2")
-
-    if [ -b "${DEVICE_PATH}" ]; then
-        DEVICE_MAJOR=$(stat -c '%t' "${DEVICE_PATH}")
-        DEVICE_MINOR=$(stat -c '%T' "${DEVICE_PATH}")
-        if [ "${DEVICE_MAJOR}" = "${EXPECTED_MAJOR}" ] && [ "${DEVICE_MINOR}" = "${EXPECTED_MINOR}" ]; then
+    ATTEMPT=0
+    while [ "${ATTEMPT}" -lt 10 ]; do
+        if [ -b "${DEVICE_PATH}" ]; then
             return
         fi
-        rm -f "${DEVICE_PATH}"
+        reread_partition_table
+        ATTEMPT=$((ATTEMPT + 1))
+        sleep 1
+    done
+
+    if create_partition_node_from_disk "${DEVICE_PATH}" && [ -b "${DEVICE_PATH}" ]; then
+        return
     fi
 
-    mknod "${DEVICE_PATH}" b "$1" "$2"
+    echo "Error: Partition ${DEVICE_PATH} does not exist after re-reading ${DISK}" >&2
+    exit 1
 }
 
 if ! partition_exists "${BOOT_DEVICE}" || ! partition_exists "${ROOT_DEVICE}"; then
     rm -f "${BOOT_DEVICE}" "${ROOT_DEVICE}"
-    parted ${DISK} -- mklabel gpt
-    parted ${DISK} -- mkpart ESP fat32 1MB 512MB
-    parted ${DISK} -- mkpart root ext2 512MB 100%
-    parted ${DISK} -- set 1 esp on
-    partx -a ${DISK} 2>/dev/null || true
+    sgdisk --clear \
+        --new=1:2048:+511M --typecode=1:EF00 --change-name=1:boot \
+        --new=2:0:0 --typecode=2:8300 --change-name=2:nixos \
+        "${DISK}"
+    reread_partition_table
     echo "partition finished"
 
     ensure_partition_device "${BOOT_DEVICE}"
     ensure_partition_device "${ROOT_DEVICE}"
 
-    mkfs.fat -F 32 -n boot "${BOOT_DEVICE}"
+    mkfs.fat -F 32 -n BOOT "${BOOT_DEVICE}"
     mkfs.ext2 -L nixos "${ROOT_DEVICE}"
     echo "mkfs finished"
 else
@@ -143,8 +163,8 @@ else
     echo "Partitions ${BOOT_DEVICE} and ${ROOT_DEVICE} already exist — skipping partitioning and mkfs"
 fi
 
-if findmnt -M ${BUILD_DIR}/boot >/dev/null; then
-	umount -d ${BUILD_DIR}/boot
+if findmnt -M ${BUILD_DIR}/boot/efi >/dev/null; then
+	umount -d ${BUILD_DIR}/boot/efi
 fi
 if findmnt -M ${BUILD_DIR} >/dev/null; then
 	umount -d ${BUILD_DIR}
@@ -154,13 +174,14 @@ mkdir -p ${BUILD_DIR}
 mount -o sync,dirsync "${ROOT_DEVICE}" ${BUILD_DIR}
 
 mkdir -p ${BUILD_DIR}/boot
+mkdir -p ${BUILD_DIR}/boot/efi
 mkdir -p ${BUILD_DIR}/etc/nixos
-mount -o umask=077,sync,dirsync "${BOOT_DEVICE}" ${BUILD_DIR}/boot
+mount -o umask=077,sync,dirsync "${BOOT_DEVICE}" ${BUILD_DIR}/boot/efi
 
 echo "${BUILD_DIR} is mounted successfully!"
 
 cleanup() {
-    umount -d ${BUILD_DIR}/boot 2>/dev/null || true
+    umount -d ${BUILD_DIR}/boot/efi 2>/dev/null || true
     umount -d ${BUILD_DIR} 2>/dev/null || true
     rm -rf ${BUILD_DIR}
 }
@@ -173,6 +194,9 @@ cp -r @aster-etc-nixos@/overlays ${BUILD_DIR}/etc/nixos
 cp -r @aster-etc-nixos@/pkgs ${BUILD_DIR}/etc/nixos
 
 COMMON_NIX_ARGS=(
+    --option sandbox false
+    --option filter-syscalls false
+    --option build-users-group ""
     --option extra-substituters "@aster-substituters@"
     --option extra-trusted-public-keys "@aster-trusted-public-keys@"
 )
@@ -194,7 +218,12 @@ SYSTEM_CLOSURE=$(nix-build '<nixpkgs/nixos>' -A system \
 
 export PATH=${PATH}:/run/current-system/sw/bin
 nixos-install --root ${BUILD_DIR} --no-root-passwd \
+    --no-channel-copy \
+    --no-bootloader \
     --system "${SYSTEM_CLOSURE}" \
     "${COMMON_NIX_ARGS[@]}"
+
+nixos-enter --root ${BUILD_DIR} -c \
+    'NIXOS_INSTALL_BOOTLOADER=1 /nix/var/nix/profiles/system/bin/switch-to-configuration boot'
 
 echo "Congratulations! Asterinas NixOS has been installed successfully!"

@@ -275,6 +275,14 @@ impl BlockDevice for PartitionNode {
     fn id(&self) -> DeviceId {
         self.id
     }
+
+    fn is_partition(&self) -> bool {
+        true
+    }
+
+    fn partition_start_sector(&self) -> Option<u64> {
+        Some(self.info.start_sector())
+    }
 }
 
 impl PartitionNode {

@@ -32,8 +32,9 @@ fi
 # Change to Asterinas root directory to ensure all scripts run from the correct location.
 cd "${ASTERINAS_DIR}"
 
-# Get base QEMU arguments from qemu_args.sh script
-QEMU_ARGS=$(${ASTERINAS_DIR}/tools/qemu_args.sh common 2>/dev/null)
+# Get base QEMU arguments from qemu_args.sh script. NixOS runs use their own
+# target disk, so skip the default initramfs test images.
+QEMU_ARGS=$(ATTACH_TEST_BLOCK_DEVICES=false "${ASTERINAS_DIR}/tools/qemu_args.sh" common 2>/dev/null)
 
 # Add mode-specific disk and device arguments
 case "$MODE" in
@@ -41,7 +42,7 @@ case "$MODE" in
         NIXOS_DIR="${ASTERINAS_DIR}/target/nixos"
         QEMU_ARGS="${QEMU_ARGS} \
             -drive if=none,format=raw,id=u0,file=${NIXOS_DIR}/asterinas.img \
-            -device virtio-blk-pci,drive=u0,disable-legacy=on,disable-modern=off \
+            -device virtio-blk-pci,bus=pcie.0,addr=0x5,drive=u0,disable-legacy=on,disable-modern=off \
         "
         ;;
     iso)
@@ -62,7 +63,7 @@ case "$MODE" in
         QEMU_ARGS="${QEMU_ARGS} \
             -cdrom ${ISO_IMAGE_PATH} -boot d \
             -drive if=none,format=raw,id=u0,file=${ASTER_IMAGE_PATH} \
-            -device virtio-blk-pci,drive=u0,disable-legacy=on,disable-modern=off \
+            -device virtio-blk-pci,bus=pcie.0,addr=0x5,drive=u0,disable-legacy=on,disable-modern=off \
         "
         ;;
     *)

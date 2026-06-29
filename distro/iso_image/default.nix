@@ -39,7 +39,7 @@ let
         cp -L ${installer}/etc_nixos/configuration.nix $HOME && chmod u+w $HOME/configuration.nix
       fi
 
-      ${pkgs.lib.optionalString (autoInstall && !useAsterinasKernel) ''
+      ${pkgs.lib.optionalString autoInstall ''
         if [ "$(tty)" == "/dev/hvc0" ]; then
           echo "The installer automatically runs on /dev/hvc0!"
           aster-nixos-install --config $HOME/configuration.nix --disk /dev/vda --force-format-disk || true
@@ -180,6 +180,12 @@ let
       boot.initrd.enable = lib.mkForce false;
       boot.initrd.availableKernelModules = lib.mkForce [ ];
       boot.initrd.kernelModules = lib.mkForce [ ];
+
+      nix.settings = {
+        filter-syscalls = false;
+        sandbox = false;
+        build-users-group = "";
+      };
     };
 
   configuration = {

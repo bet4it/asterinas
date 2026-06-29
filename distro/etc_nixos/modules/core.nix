@@ -11,6 +11,7 @@ in {
   boot.loader.grub.efiSupport = true;
   boot.loader.grub.device = "nodev";
   boot.loader.grub.efiInstallAsRemovable = true;
+  boot.loader.efi.efiSysMountPoint = "/boot/efi";
   # Hook function will be called in stage-2-init and before running systemd.
   boot.postBootCommands = ''
     echo "Executing postBootCommands..."

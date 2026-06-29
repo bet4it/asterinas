@@ -19,6 +19,7 @@
 #  - SMP: number of CPUs;
 #  - MEM: amount of memory, e.g. "8G";
 #  - VNC_PORT: VNC port, default is "42";
+#  - ATTACH_TEST_BLOCK_DEVICES: "true" or "false", whether to attach default test block images. Defaults to "true";
 #  - ATTACH_XFSTESTS_IMAGES: "true" or "false", whether to attach xfstests images (xfstests_test.img and xfstests_scratch.img) to the VM. Defaults to auto-detection from ENABLE_CONFORMANCE_TEST + CONFORMANCE_TEST_SUITE.
 
 OVMF=${OVMF:-"on"}
@@ -28,6 +29,7 @@ VIRTIOFS=${VIRTIOFS:-"off"}
 NETDEV=${NETDEV:-"user"}
 CONSOLE=${CONSOLE:-"hvc0"}
 
+ATTACH_TEST_BLOCK_DEVICES=${ATTACH_TEST_BLOCK_DEVICES:-true}
 ATTACH_XFSTESTS_IMAGES=${ATTACH_XFSTESTS_IMAGES:-false}
 if [ "${ENABLE_CONFORMANCE_TEST:-"false"}" = "true" ] && \
    [ "${CONFORMANCE_TEST_SUITE:-"ltp"}" = "xfstests" ]; then
@@ -140,9 +142,15 @@ COMMON_QEMU_ARGS="\
     $NETDEV_ARGS \
     $QEMU_OPT_ARG_DUMP_PACKETS \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+"
+
+# Add the default block images used by normal OSDK runs.
+if [ "$ATTACH_TEST_BLOCK_DEVICES" = "true" ]; then
+    COMMON_QEMU_ARGS="$COMMON_QEMU_ARGS \
     -drive if=none,format=raw,id=x0,file=./test/initramfs/build/ext2.img \
     -drive if=none,format=raw,id=x1,file=./test/initramfs/build/exfat.img \
 "
+fi
 
 # Add xfstests drives when the selected conformance suite is `xfstests`.
 if [ "$ATTACH_XFSTESTS_IMAGES" = "true" ]; then
@@ -171,8 +179,14 @@ if [ "$1" = "microvm" ]; then
         -machine microvm,rtc=on \
         -nodefaults \
         -no-user-config \
+    "
+    if [ "$ATTACH_TEST_BLOCK_DEVICES" = "true" ]; then
+        QEMU_ARGS="$QEMU_ARGS \
         -device virtio-blk-device,drive=x0,serial=vext2 \
         -device virtio-blk-device,drive=x1,serial=vexfat \
+        "
+    fi
+    QEMU_ARGS="$QEMU_ARGS \
         -device virtio-keyboard-device \
         -device virtio-net-device,netdev=net01 \
         -device virtio-serial-device \
@@ -182,14 +196,20 @@ else
     QEMU_ARGS="\
         $COMMON_QEMU_ARGS \
         -machine q35,kernel-irqchip=split \
+    "
+    if [ "$ATTACH_TEST_BLOCK_DEVICES" = "true" ]; then
+        QEMU_ARGS="$QEMU_ARGS \
         -device virtio-blk-pci,bus=pcie.0,addr=0x6,drive=x0,serial=vext2,disable-legacy=on,disable-modern=off,queue-size=64,num-queues=1,request-merging=off,backend_defaults=off,discard=off,write-zeroes=off,event_idx=off,indirect_desc=off,queue_reset=off$IOMMU_DEV_EXTRA \
         -device virtio-blk-pci,bus=pcie.0,addr=0x7,drive=x1,serial=vexfat,disable-legacy=on,disable-modern=off,queue-size=64,num-queues=1,request-merging=off,backend_defaults=off,discard=off,write-zeroes=off,event_idx=off,indirect_desc=off,queue_reset=off$IOMMU_DEV_EXTRA \
+        -drive if=none,format=raw,id=nvme0n1,file=./test/initramfs/build/nvme0n1.img \
+        -device nvme,drive=nvme0n1,serial=nvme0n1 \
+        "
+    fi
+    QEMU_ARGS="$QEMU_ARGS \
         -object rng-random,id=rng0,filename=/dev/urandom \
         -device virtio-rng-pci,bus=pcie.0,addr=0x8,disable-legacy=on,disable-modern=off,rng=rng0,event_idx=off,indirect_desc=off,queue_reset=off$IOMMU_DEV_EXTRA \
         -device virtio-net-pci,netdev=net01,disable-legacy=on,disable-modern=off$VIRTIO_NET_FEATURES$IOMMU_DEV_EXTRA \
         -device virtio-serial-pci,disable-legacy=on,disable-modern=off$IOMMU_DEV_EXTRA \
-        -drive if=none,format=raw,id=nvme0n1,file=./test/initramfs/build/nvme0n1.img \
-        -device nvme,drive=nvme0n1,serial=nvme0n1 \
         $CONSOLE_ARGS \
         $IOMMU_EXTRA_ARGS \
     "
