@@ -209,7 +209,10 @@ impl FsContextFile {
                 drop(state);
                 self.set_fs_flags(FsFlags::RDONLY)
             }
-            _ => return_errno_with_message!(Errno::EINVAL, "unsupported fsconfig flag"),
+            _ => {
+                warn!("unsupported fsconfig flag: {}", key);
+                Ok(())
+            }
         }
     }
 
@@ -228,7 +231,10 @@ impl FsContextFile {
                 Ok(())
             }
             "nr_inodes" | "size" => Ok(()),
-            _ => return_errno_with_message!(Errno::EINVAL, "unsupported fsconfig string option"),
+            _ => {
+                warn!("unsupported fsconfig string option: {}={}", key, value);
+                Ok(())
+            }
         }
     }
 
