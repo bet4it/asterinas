@@ -185,6 +185,10 @@ struct FsContextState {
     source: Option<String>,
     mode: Option<InodeMode>,
     fs: Option<Arc<dyn FileSystem>>,
+    /// Accumulates unrecognized fsconfig key=value options as a comma-separated
+    /// string, so that filesystem-specific mount options (e.g. `minixdf`) set
+    /// via the new mount API are forwarded to `FsCreationCtx`.
+    extra_options: String,
 }
 
 impl FsContextFile {
@@ -196,13 +200,14 @@ impl FsContextFile {
                 source: None,
                 mode: None,
                 fs: None,
+                extra_options: String::new(),
             }),
             pseudo_path: AnonInodeFs::new_path(|_| "anon_inode:[fscontext]".to_string()),
         }
     }
 
     fn set_flag(&self, key: &str) -> Result<()> {
-        let state = self.state.lock();
+        let mut state = self.state.lock();
         match key {
             "noswap" => Ok(()),
             "ro" => {
@@ -210,7 +215,10 @@ impl FsContextFile {
                 self.set_fs_flags(FsFlags::RDONLY)
             }
             _ => {
-                warn!("unsupported fsconfig flag: {}", key);
+                if !state.extra_options.is_empty() {
+                    state.extra_options.push(',');
+                }
+                state.extra_options.push_str(key);
                 Ok(())
             }
         }
@@ -232,7 +240,12 @@ impl FsContextFile {
             }
             "nr_inodes" | "size" => Ok(()),
             _ => {
-                warn!("unsupported fsconfig string option: {}={}", key, value);
+                if !state.extra_options.is_empty() {
+                    state.extra_options.push(',');
+                }
+                state.extra_options.push_str(key);
+                state.extra_options.push('=');
+                state.extra_options.push_str(value);
                 Ok(())
             }
         }
@@ -244,8 +257,16 @@ impl FsContextFile {
             return_errno_with_message!(Errno::EBUSY, "the file system has already been created");
         }
 
+        let args_cstr = if state.extra_options.is_empty() {
+            None
+        } else {
+            Some(CString::new(state.extra_options.as_str()).map_err(|_| {
+                Error::with_message(Errno::EINVAL, "mount options contain null byte")
+            })?)
+        };
+        let args_ref = args_cstr.as_deref();
         let fs_creation_ctx =
-            FsCreationCtx::new(state.source.as_deref(), state.fs_flags, None, ctx);
+            FsCreationCtx::new(state.source.as_deref(), state.fs_flags, args_ref, ctx);
         let fs = state.fs_type.create(&fs_creation_ctx)?;
         if let Some(mode) = state.mode {
             fs.root_inode().set_mode(mode)?;
