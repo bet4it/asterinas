@@ -182,6 +182,7 @@ struct FsContextFile {
 struct FsContextState {
     fs_type: &'static dyn FsType,
     fs_flags: FsFlags,
+    source: Option<String>,
     mode: Option<InodeMode>,
     fs: Option<Arc<dyn FileSystem>>,
 }
@@ -192,6 +193,7 @@ impl FsContextFile {
             state: Mutex::new(FsContextState {
                 fs_type,
                 fs_flags: FsFlags::empty(),
+                source: None,
                 mode: None,
                 fs: None,
             }),
@@ -217,6 +219,10 @@ impl FsContextFile {
             return_errno_with_message!(Errno::EBUSY, "the file system has already been created");
         }
         match key {
+            "source" => {
+                state.source = Some(value.to_string());
+                Ok(())
+            }
             "mode" => {
                 state.mode = Some(parse_octal_mode(value)?);
                 Ok(())
@@ -232,7 +238,8 @@ impl FsContextFile {
             return_errno_with_message!(Errno::EBUSY, "the file system has already been created");
         }
 
-        let fs_creation_ctx = FsCreationCtx::new(None, state.fs_flags, None, ctx);
+        let fs_creation_ctx =
+            FsCreationCtx::new(state.source.as_deref(), state.fs_flags, None, ctx);
         let fs = state.fs_type.create(&fs_creation_ctx)?;
         if let Some(mode) = state.mode {
             fs.root_inode().set_mode(mode)?;
