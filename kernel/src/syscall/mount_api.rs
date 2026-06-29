@@ -93,13 +93,13 @@ pub fn sys_fsmount(
     let flags = FsMountFlags::from_bits(flags)
         .ok_or_else(|| Error::with_message(Errno::EINVAL, "unknown fsmount flags"))?;
     let per_mount_flags = mount_attrs_to_per_mount_flags(mount_attrs)?;
-    let fs = {
+    let (fs, source) = {
         let mut file_table = ctx.thread_local.borrow_file_table_mut();
         let file = get_file_fast!(&mut file_table, fs_fd.try_into()?);
         let fs_context = file
             .downcast_ref::<FsContextFile>()
             .ok_or_else(|| Error::with_message(Errno::EINVAL, "the file is not a fs context"))?;
-        fs_context.created_fs()?
+        (fs_context.created_fs()?, fs_context.source())
     };
 
     let current_ns_proxy = ctx.thread_local.borrow_ns_proxy();
@@ -108,7 +108,7 @@ pub fn sys_fsmount(
         fs.clone(),
         per_mount_flags,
         Arc::downgrade(current_mnt_ns),
-        Some(fs.name().to_string()),
+        source,
     )?;
     let file = Arc::new(DetachedMountFile::new(detached_mount)) as Arc<dyn FileLike>;
     let fd_flags = if flags.contains(FsMountFlags::FSMOUNT_CLOEXEC) {
@@ -276,6 +276,10 @@ impl FsContextFile {
             .fs
             .clone()
             .ok_or_else(|| Error::with_message(Errno::EINVAL, "the file system is not created"))
+    }
+
+    fn source(&self) -> Option<String> {
+        self.state.lock().source.clone()
     }
 }
 
