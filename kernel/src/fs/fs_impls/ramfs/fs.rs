@@ -13,6 +13,7 @@ use hashbrown::HashMap;
 use ostd::{
     mm::VmIo,
     sync::{PreemptDisabled, RwLockWriteGuard},
+    task::Task,
 };
 
 use super::{memfd::MemfdInode, xattr::RamXattr, *};
@@ -36,7 +37,7 @@ use crate::{
         },
     },
     prelude::*,
-    process::{Gid, Uid},
+    process::{Gid, Uid, posix_thread::AsPosixThread},
     time::clocks::RealTimeCoarseClock,
     vm::page_cache::PageCache,
 };
@@ -146,6 +147,18 @@ impl FileSystem for RamFs {
     fn fs_event_subscriber_stats(&self) -> &FsEventSubscriberStats {
         &self.fs_event_subscriber_stats
     }
+}
+
+fn current_fs_ids() -> (Uid, Gid) {
+    let Some(task) = Task::current() else {
+        return (Uid::new_root(), Gid::new_root());
+    };
+    let Some(posix_thread) = task.as_posix_thread() else {
+        return (Uid::new_root(), Gid::new_root());
+    };
+
+    let credentials = posix_thread.credentials();
+    (credentials.fsuid(), credentials.fsgid())
 }
 
 /// An inode of `RamFs`.
@@ -873,24 +886,22 @@ impl Inode for RamInode {
             return_errno_with_message!(Errno::EEXIST, "entry exists");
         }
 
+        let (uid, gid) = current_fs_ids();
         let new_inode = match type_ {
             MknodType::CharDevice(dev_id) | MknodType::BlockDevice(dev_id) => {
                 let dev_type = type_.device_type().unwrap();
                 RamInode::new_device(
                     &self.fs.upgrade().unwrap(),
                     mode,
-                    Uid::new_root(),
-                    Gid::new_root(),
+                    uid,
+                    gid,
                     dev_type,
                     dev_id,
                 )
             }
-            MknodType::NamedPipe => RamInode::new_named_pipe(
-                &self.fs.upgrade().unwrap(),
-                mode,
-                Uid::new_root(),
-                Gid::new_root(),
-            ),
+            MknodType::NamedPipe => {
+                RamInode::new_named_pipe(&self.fs.upgrade().unwrap(), mode, uid, gid)
+            }
         };
 
         let mut self_dir = self_dir.upgrade();
@@ -923,15 +934,12 @@ impl Inode for RamInode {
         }
 
         let fs = self.fs.upgrade().unwrap();
+        let (uid, gid) = current_fs_ids();
         let new_inode = match type_ {
-            InodeType::File => RamInode::new_file(&fs, mode, Uid::new_root(), Gid::new_root()),
-            InodeType::SymLink => {
-                RamInode::new_symlink(&fs, mode, Uid::new_root(), Gid::new_root())
-            }
-            InodeType::Socket => RamInode::new_socket(&fs, mode, Uid::new_root(), Gid::new_root()),
-            InodeType::Dir => {
-                RamInode::new_dir(&fs, mode, Uid::new_root(), Gid::new_root(), &self.this)
-            }
+            InodeType::File => RamInode::new_file(&fs, mode, uid, gid),
+            InodeType::SymLink => RamInode::new_symlink(&fs, mode, uid, gid),
+            InodeType::Socket => RamInode::new_socket(&fs, mode, uid, gid),
+            InodeType::Dir => RamInode::new_dir(&fs, mode, uid, gid, &self.this),
             _ => {
                 panic!("unsupported inode type");
             }
@@ -963,13 +971,8 @@ impl Inode for RamInode {
         }
 
         let fs = self.fs.upgrade().unwrap();
-        Ok(RamInode::new_tmpfile(
-            &fs,
-            mode,
-            Uid::new_root(),
-            Gid::new_root(),
-            hard_linkability,
-        ))
+        let (uid, gid) = current_fs_ids();
+        Ok(RamInode::new_tmpfile(&fs, mode, uid, gid, hard_linkability))
     }
 
     fn link(&self, old: &Arc<dyn Inode>, name: &str) -> Result<()> {

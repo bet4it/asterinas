@@ -73,9 +73,8 @@ impl<const FRAC_BITS: u32> FixedU32<FRAC_BITS> {
         Self(raw)
     }
 
-    /// Gets the raw underlying value.
-    #[cfg(ktest)]
-    const fn raw(self) -> u32 {
+    /// Returns the raw underlying fixed-point value.
+    pub const fn raw(self) -> u32 {
         self.0
     }
 

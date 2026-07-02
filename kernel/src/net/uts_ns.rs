@@ -206,6 +206,34 @@ impl UtsName {
             }
         }
     };
+
+    /// Returns the hostname.
+    pub fn nodename(&self) -> &str {
+        uts_field_as_str(&self.nodename)
+    }
+
+    /// Returns the OS release.
+    pub fn release(&self) -> &str {
+        uts_field_as_str(&self.release)
+    }
+
+    /// Returns the OS version.
+    pub fn version(&self) -> &str {
+        uts_field_as_str(&self.version)
+    }
+
+    /// Returns the NIS domain name.
+    pub fn domainname(&self) -> &str {
+        uts_field_as_str(&self.domainname)
+    }
+}
+
+fn uts_field_as_str(field: &[u8; UTS_FIELD_LEN]) -> &str {
+    let len = field
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(UTS_FIELD_LEN);
+    core::str::from_utf8(&field[..len]).unwrap_or_default()
 }
 
 impl NsCommonOps for UtsNamespace {

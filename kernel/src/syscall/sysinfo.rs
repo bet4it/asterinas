@@ -4,7 +4,14 @@ use aster_time::read_monotonic_time;
 use ostd::mm::VmIo;
 
 use super::SyscallReturn;
-use crate::{prelude::*, process::pid_table};
+use crate::{
+    prelude::*,
+    process::pid_table,
+    sched::loadavg::{LoadAvgFixed, get_loadavg},
+};
+
+const SI_LOAD_SHIFT: u32 = 16;
+const LOAD_AVG_FRAC_BITS: u32 = 11;
 
 #[padding_struct]
 #[repr(C)]
@@ -25,8 +32,14 @@ struct SysInfo {
 }
 
 pub fn sys_sysinfo(sysinfo_addr: Vaddr, ctx: &Context) -> Result<SyscallReturn> {
+    let loadavg = get_loadavg();
     let info = SysInfo {
         uptime: read_monotonic_time().as_secs() as i64,
+        loads: [
+            loadavg_to_sysinfo_load(loadavg[0]),
+            loadavg_to_sysinfo_load(loadavg[1]),
+            loadavg_to_sysinfo_load(loadavg[2]),
+        ],
         totalram: crate::vm::mem_total() as u64,
         freeram: osdk_frame_allocator::load_total_free_size() as u64,
         procs: pid_table::pid_table_mut().process_count() as u16,
@@ -37,4 +50,8 @@ pub fn sys_sysinfo(sysinfo_addr: Vaddr, ctx: &Context) -> Result<SyscallReturn> 
     };
     ctx.user_space().write_val(sysinfo_addr, &info)?;
     Ok(SyscallReturn::Return(0))
+}
+
+fn loadavg_to_sysinfo_load(loadavg: LoadAvgFixed) -> u64 {
+    (loadavg.raw() as u64) << (SI_LOAD_SHIFT - LOAD_AVG_FRAC_BITS)
 }

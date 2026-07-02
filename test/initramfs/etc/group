@@ -7,4 +7,6 @@
 # See the group(5) man page for additional information about this file.
 ##
 root:x:0:
+daemon:x:1:
+users:x:100:
 nogroup:x:65534:
