@@ -27,6 +27,8 @@ VSOCK=${VSOCK:-"off"}
 VIRTIOFS=${VIRTIOFS:-"off"}
 NETDEV=${NETDEV:-"user"}
 CONSOLE=${CONSOLE:-"hvc0"}
+QEMU_LOG=${QEMU_LOG:-"qemu.log"}
+QEMU_SERIAL_LOG=${QEMU_SERIAL_LOG:-"qemu-serial.log"}
 INITRAMFS_BUILD_DIR=${INITRAMFS_BUILD_DIR:-"./test/initramfs/build"}
 
 ATTACH_XFSTESTS_IMAGES=${ATTACH_XFSTESTS_IMAGES:-false}
@@ -65,7 +67,7 @@ fi
 
 if [ "$CONSOLE" = "hvc0" ]; then
     # Kernel logs are printed to all consoles. Redirect serial output to a file to avoid duplicate logs.
-    CONSOLE_ARGS="-device virtconsole,chardev=mux -serial file:qemu-serial.log"
+    CONSOLE_ARGS="-device virtconsole,chardev=mux -serial file:${QEMU_SERIAL_LOG}"
 else
     CONSOLE_ARGS="-serial chardev:mux"
 fi
@@ -83,7 +85,7 @@ if [ "$1" = "riscv" ]; then
         -nographic \
         -display none \
         -monitor chardev:mux \
-        -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
+        -chardev stdio,id=mux,mux=on,signal=off,logfile=${QEMU_LOG} \
         -drive if=none,format=raw,id=x0,file=${INITRAMFS_BUILD_DIR}/ext2.img \
         -drive if=none,format=raw,id=x1,file=${INITRAMFS_BUILD_DIR}/exfat.img \
         -device virtio-blk-device,drive=x1 \
@@ -118,7 +120,7 @@ if [ "$1" = "tdx" ]; then
         -device virtio-keyboard-pci,disable-legacy=on,disable-modern=off \
         $NETDEV_ARGS \
         $QEMU_OPT_ARG_DUMP_PACKETS \
-        -chardev stdio,id=mux,mux=on,logfile=qemu.log \
+        -chardev stdio,id=mux,mux=on,logfile=${QEMU_LOG} \
         -device virtio-serial,romfile= \
         $CONSOLE_ARGS \
         -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
@@ -137,7 +139,7 @@ COMMON_QEMU_ARGS="\
     -nographic \
     -display vnc=0.0.0.0:${VNC_PORT:-42} \
     -monitor chardev:mux \
-    -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
+    -chardev stdio,id=mux,mux=on,signal=off,logfile=${QEMU_LOG} \
     $NETDEV_ARGS \
     $QEMU_OPT_ARG_DUMP_PACKETS \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \

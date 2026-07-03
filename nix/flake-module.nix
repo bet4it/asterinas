@@ -136,6 +136,8 @@
         export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$NIX_RUN_DIR/cargo-target}"
         export INITRAMFS_BUILD_DIR="''${INITRAMFS_BUILD_DIR:-$NIX_RUN_DIR/initramfs}"
         export NIXOS_DIR="''${NIXOS_DIR:-$NIX_RUN_DIR/nixos}"
+        export QEMU_LOG="''${QEMU_LOG:-$NIX_RUN_DIR/qemu.log}"
+        export QEMU_SERIAL_LOG="''${QEMU_SERIAL_LOG:-$NIX_RUN_DIR/qemu-serial.log}"
         export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
         export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
         export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
