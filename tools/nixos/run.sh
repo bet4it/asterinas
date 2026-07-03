@@ -31,6 +31,7 @@ fi
 
 # Change to Asterinas root directory to ensure all scripts run from the correct location.
 cd "${ASTERINAS_DIR}"
+NIXOS_DIR=${NIXOS_DIR:-"${ASTERINAS_DIR}/target/nixos"}
 
 # Get base QEMU arguments from qemu_args.sh script
 QEMU_ARGS=$(${ASTERINAS_DIR}/tools/qemu_args.sh common 2>/dev/null)
@@ -38,22 +39,22 @@ QEMU_ARGS=$(${ASTERINAS_DIR}/tools/qemu_args.sh common 2>/dev/null)
 # Add mode-specific disk and device arguments
 case "$MODE" in
     nixos)
-        NIXOS_DIR="${ASTERINAS_DIR}/target/nixos"
         QEMU_ARGS="${QEMU_ARGS} \
             -drive if=none,format=raw,id=u0,file=${NIXOS_DIR}/asterinas.img \
             -device virtio-blk-pci,drive=u0,disable-legacy=on,disable-modern=off \
         "
         ;;
     iso)
-        ASTER_IMAGE_PATH=${ASTERINAS_DIR}/target/nixos/asterinas.img
+        ASTER_IMAGE_PATH=${NIXOS_DIR}/asterinas.img
         NIXOS_DISK_SIZE_IN_MB=${NIXOS_DISK_SIZE_IN_MB:-8192}
-        ISO_IMAGE_PATH=$(find "${ASTERINAS_DIR}/target/nixos/iso_image/iso" -name "*.iso" | head -n 1)
+        ISO_IMAGE_PATH=$(find "${NIXOS_DIR}/iso_image/iso" -name "*.iso" 2>/dev/null | head -n 1)
 
         if [ ! -f "$ISO_IMAGE_PATH" ]; then
             echo "Error: ISO_IMAGE not found!"
             exit 1
         fi
 
+        mkdir -p "${NIXOS_DIR}"
         rm -f "${ASTER_IMAGE_PATH}"
         echo "Creating image at ${ASTER_IMAGE_PATH} of size ${NIXOS_DISK_SIZE_IN_MB}MB......"
         dd if=/dev/zero of="${ASTER_IMAGE_PATH}" bs=1M count=${NIXOS_DISK_SIZE_IN_MB} status=none

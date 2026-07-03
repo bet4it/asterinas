@@ -134,6 +134,7 @@
         export NIX_RUN_DIR="''${NIX_RUN_DIR:-$ASTERINAS_DIR/.nix-run}"
         export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$NIX_RUN_DIR/cargo-target}"
         export INITRAMFS_BUILD_DIR="''${INITRAMFS_BUILD_DIR:-$NIX_RUN_DIR/initramfs}"
+        export NIXOS_DIR="''${NIXOS_DIR:-$NIX_RUN_DIR/nixos}"
 
         target_nix_system() {
           case "$1" in
@@ -337,7 +338,6 @@
               ${appPrelude}
               ${ensureInitramfs}
               cd "$ASTERINAS_DIR/kernel"
-              KVM_ARG=""
               cargo osdk build \
                 --release \
                 --boot-method="grub-rescue-iso" \
@@ -348,7 +348,7 @@
                 --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
-              mkdir -p target/nixos
+              mkdir -p "$NIXOS_DIR"
               nix-build distro/iso_image \
                 --argstr target_platform "$NIX_SYSTEM" \
                 --arg autoInstall "''${AUTO_INSTALL:-true}" \
@@ -356,7 +356,7 @@
                 --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
                 --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
                 --argstr version "$(cat VERSION)" \
-                --out-link target/nixos/iso_image
+                --out-link "$NIXOS_DIR/iso_image"
             '';
 
           "run-iso" = mkApp "asterinas-run-iso"
@@ -383,18 +383,17 @@
                 --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
-              pushd distro >/dev/null
-              nix-build aster_nixos_installer/default.nix \
+              mkdir -p "$NIXOS_DIR"
+              nix-build distro/aster_nixos_installer/default.nix \
                 --argstr target_platform "$NIX_SYSTEM" \
                 --argstr disable-systemd "''${NIXOS_DISABLE_SYSTEMD:-false}" \
                 --argstr stage-2-hook "''${NIXOS_STAGE_2_INIT:-/bin/sh -l}" \
                 --argstr log-level "''${LOG_LEVEL:-error}" \
                 --argstr console "''${CONSOLE:-hvc0}" \
                 --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
-                --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}"
-              popd >/dev/null
-              mkdir -p target/nixos
-              DISK_IMAGE="target/nixos/asterinas.img"
+                --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
+                --out-link "$NIXOS_DIR/aster-nixos-installer"
+              DISK_IMAGE="$NIXOS_DIR/asterinas.img"
               DISK_SIZE_MB="''${NIXOS_DISK_SIZE_IN_MB:-8192}"
               CONFIG_PATH="distro/etc_nixos/''${CONFIG_FILE_NAME:-configuration.nix}"
               if [ ! -e "$DISK_IMAGE" ]; then
@@ -402,7 +401,7 @@
               fi
               DISK="$(losetup -fP --show "$DISK_IMAGE")"
               trap 'losetup -d "$DISK" 2>/dev/null || true' EXIT INT TERM ERR
-              ./distro/result/bin/aster-nixos-install --config "$CONFIG_PATH" --disk "$DISK"
+              "$NIXOS_DIR/aster-nixos-installer/bin/aster-nixos-install" --config "$CONFIG_PATH" --disk "$DISK"
             '';
 
           "run-nixos" = mkApp "asterinas-run-nixos"
