@@ -10,7 +10,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::util::get_cargo_metadata;
+use crate::util::{get_cargo_metadata, local_dev_osdk_dir};
 
 /// Compares two files byte-by-byte to check if they are identical.
 /// Returns `Ok(true)` if files are identical, `Ok(false)` if they are different, or `Err` if any I/O operation fails.
@@ -269,7 +269,7 @@ fn add_manifest_dependency(
 fn add_manifest_dependency_to(manifest: &mut toml::Value, dep_name: &str, path: PathBuf) {
     let dep_str = match option_env!("OSDK_LOCAL_DEV") {
         Some("1") => {
-            let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let crate_dir = local_dev_osdk_dir();
             let dep_crate_dir = crate_dir.join(path);
             format!(
                 "{} = {{ path = \"{}\" }}",

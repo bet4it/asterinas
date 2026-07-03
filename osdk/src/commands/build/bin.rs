@@ -16,7 +16,7 @@ use crate::{
         bin::{AsterBin, AsterBinType, AsterBzImageMeta},
         file::BundleFile,
     },
-    util::{get_current_crates, hard_link_or_copy, new_command_checked_exists},
+    util::{get_current_crates, hard_link_or_copy, local_dev_osdk_dir, new_command_checked_exists},
 };
 
 pub fn make_install_bzimage(
@@ -183,7 +183,7 @@ fn install_setup_with_arch(
     cmd.arg("--force");
     cmd.arg("--root").arg(install_dir.as_ref());
     if matches!(option_env!("OSDK_LOCAL_DEV"), Some("1")) {
-        let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let crate_dir = local_dev_osdk_dir();
         let setup_dir = crate_dir.join("../ostd/libs/linux-bzimage/setup");
         cmd.arg("--path").arg(setup_dir);
     } else {

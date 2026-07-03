@@ -124,12 +124,16 @@
         fi
 
         export ASTERINAS_DIR
+        export OSDK_LOCAL_DEV_ROOT="''${OSDK_LOCAL_DEV_ROOT:-$ASTERINAS_DIR}"
         export NIX_PATH="nixpkgs=${inputs.nixpkgs}"
         export OSDK_TARGET_ARCH="''${TARGET_ARCH:-x86_64}"
         export VDSO_LIBRARY_DIR="''${VDSO_LIBRARY_DIR:-${inputs.linux-vdso}}"
         export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
         export OVMF_VARS="''${OVMF_VARS:-${pkgs.OVMF.fd}/FV/OVMF_VARS.fd}"
         export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
+        export NIX_RUN_DIR="''${NIX_RUN_DIR:-$ASTERINAS_DIR/.nix-run}"
+        export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$NIX_RUN_DIR/cargo-target}"
+        export INITRAMFS_BUILD_DIR="''${INITRAMFS_BUILD_DIR:-$NIX_RUN_DIR/initramfs}"
 
         target_nix_system() {
           case "$1" in
@@ -149,11 +153,48 @@
         fi
       '';
 
-      ensureInitramfs = ''
-        make -C "$ASTERINAS_DIR/test/initramfs" build \
-          TARGET_ARCH="''${TARGET_ARCH:-x86_64}" \
-          SMP="''${SMP:-1}" \
-          VERBOSE="''${VERBOSE:-1}"
+      configureAutoTest = ''
+        EXTRA_OSDK_ARGS=()
+
+        case "''${AUTO_TEST:-none}" in
+          conformance)
+            export ENABLE_CONFORMANCE_TEST=true
+            EXTRA_OSDK_ARGS+=(
+              --kcmd-args="CONFORMANCE_TEST_SUITE=''${CONFORMANCE_TEST_SUITE:-ltp}"
+              --kcmd-args="CONFORMANCE_TEST_WORKDIR=''${CONFORMANCE_TEST_WORKDIR:-/tmp}"
+              --kcmd-args="EXTRA_BLOCKLISTS=''${EXTRA_BLOCKLISTS:-}"
+              --init-args="/opt/run_conformance_test.sh"
+            )
+            if [ "''${CONFORMANCE_TEST_SUITE:-ltp}" = "xfstests" ]; then
+              EXTRA_OSDK_ARGS+=(
+                --kcmd-args="XFSTESTS_RUNLIST=''${XFSTESTS_RUNLIST:-/opt/xfstests/short.list}"
+                --kcmd-args="XFSTESTS_TEST_DEV=''${XFSTESTS_TEST_DEV:-/dev/vdc}"
+                --kcmd-args="XFSTESTS_SCRATCH_DEV=''${XFSTESTS_SCRATCH_DEV:-/dev/vdd}"
+              )
+            fi
+            ;;
+          regression)
+            export ENABLE_REGRESSION_TEST=true
+            EXTRA_OSDK_ARGS+=(
+              --kcmd-args="INTEL_TDX=''${INTEL_TDX:-0}"
+              --init-args="/test/run_regression_test.sh"
+            )
+            ;;
+          boot)
+            EXTRA_OSDK_ARGS+=(--init-args="/test/boot_hello.sh")
+            ;;
+          vsock)
+            export ENABLE_REGRESSION_TEST=true
+            export VSOCK=on
+            EXTRA_OSDK_ARGS+=(--init-args="/test/run_vsock_test.sh")
+            ;;
+          none | "")
+            ;;
+          *)
+            echo "Error: unsupported AUTO_TEST=''${AUTO_TEST}." >&2
+            exit 1
+            ;;
+        esac
       '';
 
       buildArgs = ''
@@ -162,8 +203,74 @@
         --boot-method="''${BOOT_METHOD:-grub-rescue-iso}" \
         --grub-boot-protocol="''${BOOT_PROTOCOL:-multiboot2}" \
         --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
-        --initramfs="$ASTERINAS_DIR/test/initramfs/build/initramfs.cpio.gz" \
+        --initramfs="''${OSDK_INITRAMFS_PATH:-$INITRAMFS_BUILD_DIR/initramfs.cpio.gz}" \
         "$KVM_ARG"
+      '';
+
+      ensureInitramfs = ''
+        BUILD_DIR="$INITRAMFS_BUILD_DIR"
+        TARGET="''${TARGET_ARCH:-x86_64}"
+        SMP_VALUE="''${SMP:-1}"
+        mkdir -p "$BUILD_DIR"
+
+        if [ "''${INITRAMFS_SKIP_GZIP:-0}" = "1" ]; then
+          INITRAMFS_IMAGE="$BUILD_DIR/initramfs.cpio"
+          INITRAMFS_COMPRESSED=false
+        else
+          INITRAMFS_IMAGE="$BUILD_DIR/initramfs.cpio.gz"
+          INITRAMFS_COMPRESSED=true
+        fi
+        export OSDK_INITRAMFS_PATH="$INITRAMFS_IMAGE"
+
+        ENABLE_BENCHMARK_TEST=false
+        if [ "''${BENCHMARK:-none}" != "none" ]; then
+          ENABLE_BENCHMARK_TEST=true
+        fi
+
+        if [ "$TARGET" = "loongarch64" ]; then
+          touch "$INITRAMFS_IMAGE"
+        else
+          nix-build "$ASTERINAS_DIR/test/initramfs/nix" \
+            --argstr target "$TARGET" \
+            --arg enableBenchmarkTest "$ENABLE_BENCHMARK_TEST" \
+            --arg enableConformanceTest "''${ENABLE_CONFORMANCE_TEST:-false}" \
+            --arg enableRegressionTest "''${ENABLE_REGRESSION_TEST:-false}" \
+            --argstr conformanceTestSuite "''${CONFORMANCE_TEST_SUITE:-ltp}" \
+            --argstr conformanceTestWorkDir "''${CONFORMANCE_TEST_WORKDIR:-/tmp}" \
+            --argstr regressionTestPlatform "''${REGRESSION_TEST_PLATFORM:-asterinas}" \
+            --argstr dnsServer "''${DNS_SERVER:-8.8.8.8}" \
+            --arg initramfsCompressed "$INITRAMFS_COMPRESSED" \
+            --arg smp "$SMP_VALUE" \
+            --out-link "$INITRAMFS_IMAGE" \
+            -A initramfs-image
+        fi
+
+        if [ ! -e "$BUILD_DIR/ext2.img" ]; then
+          truncate -s 2G "$BUILD_DIR/ext2.img"
+          mke2fs -F "$BUILD_DIR/ext2.img" >/dev/null
+        fi
+
+        if [ ! -e "$BUILD_DIR/exfat.img" ]; then
+          truncate -s 512M "$BUILD_DIR/exfat.img"
+          mkfs.exfat "$BUILD_DIR/exfat.img" >/dev/null
+        fi
+
+        if [ ! -e "$BUILD_DIR/nvme0n1.img" ]; then
+          truncate -s 256M "$BUILD_DIR/nvme0n1.img"
+          mke2fs -t ext2 -F "$BUILD_DIR/nvme0n1.img" >/dev/null
+        fi
+
+        if [ "''${ENABLE_CONFORMANCE_TEST:-false}" = "true" ] && [ "''${CONFORMANCE_TEST_SUITE:-ltp}" = "xfstests" ]; then
+          if [ ! -e "$BUILD_DIR/xfstests_test.img" ]; then
+            truncate -s "''${XFSTESTS_DISK_SIZE:-12G}" "$BUILD_DIR/xfstests_test.img"
+            mkfs.ext2 -F "$BUILD_DIR/xfstests_test.img" >/dev/null
+          fi
+
+          if [ ! -e "$BUILD_DIR/xfstests_scratch.img" ]; then
+            truncate -s "''${XFSTESTS_DISK_SIZE:-12G}" "$BUILD_DIR/xfstests_scratch.img"
+            mkfs.ext2 -F "$BUILD_DIR/xfstests_scratch.img" >/dev/null
+          fi
+        fi
       '';
     in {
       _module.args.pkgs = pkgs;
@@ -183,6 +290,7 @@
         shellHook = ''
           export NIX_PATH="nixpkgs=${inputs.nixpkgs}"
           export OSDK_TARGET_ARCH="''${TARGET_ARCH:-x86_64}"
+          export OSDK_LOCAL_DEV_ROOT="''${OSDK_LOCAL_DEV_ROOT:-$PWD}"
           export VDSO_LIBRARY_DIR="''${VDSO_LIBRARY_DIR:-${inputs.linux-vdso}}"
           export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
           export OVMF_VARS="''${OVMF_VARS:-${pkgs.OVMF.fd}/FV/OVMF_VARS.fd}"
@@ -207,19 +315,21 @@
           kernel = mkApp "asterinas-kernel"
             "Build the Asterinas kernel with cargo-osdk." ''
               ${appPrelude}
+              ${configureAutoTest}
               ${ensureInitramfs}
               ${kvmFlag}
               cd "$ASTERINAS_DIR/kernel"
-              cargo osdk build ${buildArgs}
+              cargo osdk build ${buildArgs} "''${EXTRA_OSDK_ARGS[@]}"
             '';
 
           "run-kernel" = mkApp "asterinas-run-kernel"
             "Build and run the Asterinas kernel in QEMU." ''
               ${appPrelude}
+              ${configureAutoTest}
               ${ensureInitramfs}
               ${kvmFlag}
               cd "$ASTERINAS_DIR/kernel"
-              cargo osdk run ${buildArgs}
+              cargo osdk run ${buildArgs} "''${EXTRA_OSDK_ARGS[@]}"
             '';
 
           iso =
@@ -235,7 +345,7 @@
                 --grub-boot-protocol="linux" \
                 --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
                 --kcmd-args="console=''${CONSOLE:-hvc0}" \
-                --initramfs="$ASTERINAS_DIR/test/initramfs/build/initramfs.cpio.gz"
+                --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
               mkdir -p target/nixos
@@ -270,7 +380,7 @@
                 --grub-boot-protocol="linux" \
                 --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
                 --kcmd-args="console=''${CONSOLE:-hvc0}" \
-                --initramfs="$ASTERINAS_DIR/test/initramfs/build/initramfs.cpio.gz"
+                --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
               pushd distro >/dev/null
@@ -329,7 +439,7 @@
                 --boot-method="''${BOOT_METHOD:-grub-rescue-iso}" \
                 --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
                 --grub-boot-protocol="''${BOOT_PROTOCOL:-multiboot2}" \
-                --initramfs="$ASTERINAS_DIR/test/initramfs/build/initramfs.cpio.gz" \
+                --initramfs="$OSDK_INITRAMFS_PATH" \
                 "$KVM_ARG"
             '';
         };

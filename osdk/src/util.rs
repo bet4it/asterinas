@@ -16,9 +16,17 @@ use crate::{error::Errno, error_msg};
 
 use quote::ToTokens;
 
+pub fn local_dev_osdk_dir() -> PathBuf {
+    if let Ok(workspace_root) = std::env::var("OSDK_LOCAL_DEV_ROOT") {
+        PathBuf::from(workspace_root).join("osdk")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    }
+}
+
 pub fn ostd_dep() -> String {
     if let Some("1") = option_env!("OSDK_LOCAL_DEV") {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let path = local_dev_osdk_dir()
             .parent()
             .expect("CARGO_MANIFEST_DIR should have a parent directory")
             .join("ostd");
