@@ -26,12 +26,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build Asterinas NixOS ISO installer image
         run: |
-          make iso NIXOS_TEST_SUITE=hello
+          NIXOS_TEST_SUITE=hello nix run .#iso --no-write-lock-file
       - name: Run ISO image and install Asterinas NixOS
         run: |
-          make run_iso || true
+          nix run .#run-iso --no-write-lock-file || true
           tail --lines 10 qemu.log | grep -q "^Installation finished" || (echo "Test ISO failed" && exit 1)
           echo "Test ISO succeeds!"
       - name : Run Asterinas NixOS
         run: |
-          make run_nixos NIXOS_TEST_SUITE=hello
+          NIXOS_TEST_SUITE=hello nix run .#run-nixos --no-write-lock-file

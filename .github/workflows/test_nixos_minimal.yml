@@ -39,5 +39,5 @@ jobs:
           image: asterinas/asterinas:0.18.0-20260702
           options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
           run: |
-            make nixos NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144
-            make run_nixos NIXOS_TEST_SUITE=hello
+            NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144 nix run .#install-nixos --no-write-lock-file
+            NIXOS_TEST_SUITE=hello nix run .#run-nixos --no-write-lock-file

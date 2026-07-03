@@ -192,5 +192,5 @@ jobs:
           image: asterinas/asterinas:0.18.0-20260702
           options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
           run: |
-            make nixos NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }}
-            make run_nixos NIXOS_TEST_SUITE=${{ matrix.test.name }}
+            NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }} nix run .#install-nixos --no-write-lock-file
+            NIXOS_TEST_SUITE=${{ matrix.test.name }} nix run .#run-nixos --no-write-lock-file
