@@ -105,7 +105,7 @@ if [ "$1" = "tdx" ]; then
         -nographic \
         -monitor pty \
         -nodefaults \
-        -bios /root/ovmf/release/OVMF.fd \
+        -bios ${OVMF_CODE:-/root/ovmf/release/OVMF.fd} \
         -cpu host,-kvm-steal-time,pmu=off \
         -machine q35,kernel-irqchip=split,confidential-guest-support=tdx0 \
         -object '$TDX_OBJECT' \
@@ -257,11 +257,11 @@ fi
 if [ "$OVMF" = "on" ]; then
     if [ "$1" = "microvm" ]; then
         QEMU_ARGS="${QEMU_ARGS} \
-            -bios /root/ovmf/release/microvm/MICROVM.fd \
+            -bios ${MICROVM_OVMF:-/root/ovmf/release/microvm/MICROVM.fd} \
         "
     else
         QEMU_ARGS="${QEMU_ARGS} \
-            -bios /root/ovmf/release/OVMF.fd \
+            -bios ${OVMF_CODE:-/root/ovmf/release/OVMF.fd} \
         "
     fi
 fi
