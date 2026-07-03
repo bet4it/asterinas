@@ -1,7 +1,7 @@
 project_type = "kernel"
 
 [boot]
-method = "grub-rescue-iso"
+method = "qemu-direct"
 
 [qemu]
 args = """\
@@ -13,9 +13,7 @@ args = """\
     -nographic \
     -serial chardev:mux \
     -monitor chardev:mux \
-    -chardev stdio,id=mux,mux=on,signal=off \
+    -chardev stdio,id=mux,mux=on,signal=off,logfile=qemu.log \
     -display none \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-    -drive if=pflash,format=raw,unit=0,readonly=on,file=/root/ovmf/release/OVMF.fd \
-    -drive if=pflash,format=raw,unit=1,file=/root/ovmf/release/OVMF_VARS.fd \
 """

@@ -56,6 +56,8 @@
       hostTools = with pkgs; [
         bash
         cargoOsdk
+        cachix
+        clang-tools
         coreutils
         curl
         diffutils
@@ -74,6 +76,8 @@
         grub2_efi
         gzip
         jq
+        mdbook
+        mdbook-mermaid
         mtools
         nix
         nixos-install-tools
@@ -128,13 +132,19 @@
         export NIX_PATH="nixpkgs=${inputs.nixpkgs}"
         export OSDK_TARGET_ARCH="''${TARGET_ARCH:-x86_64}"
         export VDSO_LIBRARY_DIR="''${VDSO_LIBRARY_DIR:-${inputs.linux-vdso}}"
-        export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
-        export OVMF_VARS="''${OVMF_VARS:-${pkgs.OVMF.fd}/FV/OVMF_VARS.fd}"
-        export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
         export NIX_RUN_DIR="''${NIX_RUN_DIR:-$ASTERINAS_DIR/.nix-run}"
         export CARGO_TARGET_DIR="''${CARGO_TARGET_DIR:-$NIX_RUN_DIR/cargo-target}"
         export INITRAMFS_BUILD_DIR="''${INITRAMFS_BUILD_DIR:-$NIX_RUN_DIR/initramfs}"
         export NIXOS_DIR="''${NIXOS_DIR:-$NIX_RUN_DIR/nixos}"
+        export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
+        export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
+        export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
+
+        if [ ! -e "$OVMF_VARS" ]; then
+          mkdir -p "$(dirname "$OVMF_VARS")"
+          cp "${pkgs.OVMF.fd}/FV/OVMF_VARS.fd" "$OVMF_VARS"
+          chmod u+w "$OVMF_VARS"
+        fi
 
         target_nix_system() {
           case "$1" in
@@ -196,6 +206,33 @@
             exit 1
             ;;
         esac
+      '';
+
+      workspaceLintCheck = ''
+        WORKSPACE_MEMBER_DIRS="$("$ASTERINAS_DIR/tools/print_workspace_members.sh")"
+        for member_dir in $WORKSPACE_MEMBER_DIRS; do
+          if [ "$(tail -2 "$member_dir/Cargo.toml")" != "[lints]
+        workspace = true" ]; then
+            echo "Error: Workspace lints in $member_dir are not enabled." >&2
+            exit 1
+          fi
+        done
+      '';
+
+      checkCAndNixFormatting = ''
+        find "$ASTERINAS_DIR/test/initramfs/src/regression" \
+          -type f \( -name "*.c" -o -name "*.h" \) \
+          -print0 | xargs -0 clang-format --dry-run --Werror
+        nixfmt --check "$ASTERINAS_DIR/test/initramfs/nix"
+        nixfmt --check "$ASTERINAS_DIR/distro"
+      '';
+
+      formatCAndNix = ''
+        find "$ASTERINAS_DIR/test/initramfs/src/regression" \
+          -type f \( -name "*.c" -o -name "*.h" \) \
+          -print0 | xargs -0 clang-format -i
+        nixfmt "$ASTERINAS_DIR/test/initramfs/nix"
+        nixfmt "$ASTERINAS_DIR/distro"
       '';
 
       buildArgs = ''
@@ -293,9 +330,15 @@
           export OSDK_TARGET_ARCH="''${TARGET_ARCH:-x86_64}"
           export OSDK_LOCAL_DEV_ROOT="''${OSDK_LOCAL_DEV_ROOT:-$PWD}"
           export VDSO_LIBRARY_DIR="''${VDSO_LIBRARY_DIR:-${inputs.linux-vdso}}"
+          export NIX_RUN_DIR="''${NIX_RUN_DIR:-$PWD/.nix-run}"
           export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
-          export OVMF_VARS="''${OVMF_VARS:-${pkgs.OVMF.fd}/FV/OVMF_VARS.fd}"
+          export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
           export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
+          if [ ! -e "$OVMF_VARS" ]; then
+            mkdir -p "$(dirname "$OVMF_VARS")"
+            cp "${pkgs.OVMF.fd}/FV/OVMF_VARS.fd" "$OVMF_VARS"
+            chmod u+w "$OVMF_VARS"
+          fi
           echo "Asterinas dev shell loaded."
           echo "  Rust: $(rustc --version)"
           echo "  cargo-osdk: $(cargo osdk --version)"
@@ -420,9 +463,110 @@
               NON_DEFAULT="$(./tools/print_workspace_members.sh --non-default-ones --package-names 2>/dev/null || true)"
               TEST_PKGS="$(printf '%s\n' "$NON_DEFAULT" | tr ' ' '\n' | grep -v '^linux-bzimage-setup$' || true)"
               if [ -n "$TEST_PKGS" ]; then
-                PKG_ARGS="$(printf '%s\n' "$TEST_PKGS" | sed 's/^/-p /' | tr '\n' ' ')"
-                cargo test $PKG_ARGS
+                PKG_ARGS=()
+                while IFS= read -r package; do
+                  PKG_ARGS+=(-p "$package")
+                done <<< "$TEST_PKGS"
+                cargo test "''${PKG_ARGS[@]}"
               fi
+            '';
+
+          check = mkApp "asterinas-check"
+            "Run the development checks previously covered by make check." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/format_all.sh --check
+              ${workspaceLintCheck}
+              ./tools/clippy_check.sh workspace
+              ${checkCAndNixFormatting}
+              (
+                cd "$ASTERINAS_DIR/test/nixos"
+                cargo fmt --check
+                cargo clippy -- -D warnings
+              )
+              typos "$ASTERINAS_DIR"
+            '';
+
+          format = mkApp "asterinas-format"
+            "Format Rust, C, and Nix files used by the workspace." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/format_all.sh
+              ${formatCAndNix}
+              (
+                cd "$ASTERINAS_DIR/test/nixos"
+                cargo fmt
+                nixfmt .
+              )
+            '';
+
+          docs = mkApp "asterinas-docs"
+            "Build Rust documentation for the workspace." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              DEFAULT_PACKAGES="$("$ASTERINAS_DIR/tools/print_workspace_members.sh" --default-ones --package-names)"
+              DEFAULT_DOC_PACKAGES="$(printf '%s\n' "$DEFAULT_PACKAGES" | tr ' ' '\n' | grep -v '^aster-kernel$' || true)"
+              NON_DEFAULT_PACKAGES="$("$ASTERINAS_DIR/tools/print_workspace_members.sh" --non-default-ones --package-names)"
+              NON_DEFAULT_DOC_PACKAGES="$(printf '%s\n' "$NON_DEFAULT_PACKAGES" | tr ' ' '\n' | grep -v '^linux-bzimage-setup$' || true)"
+
+              if [ -n "$DEFAULT_DOC_PACKAGES" ]; then
+                DEFAULT_DOC_ARGS=()
+                while IFS= read -r package; do
+                  DEFAULT_DOC_ARGS+=(-p "$package")
+                done <<< "$DEFAULT_DOC_PACKAGES"
+                RUSTDOCFLAGS="-Dwarnings" cargo osdk doc "''${DEFAULT_DOC_ARGS[@]}" --no-deps
+              fi
+
+              if [ -n "$NON_DEFAULT_DOC_PACKAGES" ]; then
+                NON_DEFAULT_DOC_ARGS=()
+                while IFS= read -r package; do
+                  NON_DEFAULT_DOC_ARGS+=(-p "$package")
+                done <<< "$NON_DEFAULT_DOC_PACKAGES"
+                RUSTDOCFLAGS="-Dwarnings" cargo doc "''${NON_DEFAULT_DOC_ARGS[@]}" --no-deps
+              fi
+
+              RUSTDOCFLAGS="-Dwarnings --document-private-items -Arustdoc::private_intra_doc_links" \
+                cargo osdk doc -p aster-kernel --no-deps
+
+              if [ "''${TARGET_ARCH:-x86_64}" = "x86_64" ]; then
+                (
+                  cd "$ASTERINAS_DIR/ostd/libs/linux-bzimage/setup"
+                  RUSTDOCFLAGS="-Dwarnings" cargo osdk doc --no-deps
+                )
+              fi
+            '';
+
+          book = mkApp "asterinas-book"
+            "Build the Asterinas mdBook documentation." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR/book"
+              if [ ! -e mermaid.min.js ] || [ ! -e mermaid-init.js ]; then
+                mdbook-mermaid install .
+              fi
+              mdbook build
+            '';
+
+          "check-osdk" = mkApp "asterinas-check-osdk"
+            "Run clippy for the cargo-osdk crate." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/clippy_check.sh osdk
+            '';
+
+          "test-osdk" = mkApp "asterinas-test-osdk"
+            "Build and test the cargo-osdk crate." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR/osdk"
+              OSDK_LOCAL_DEV=1 cargo build
+              OSDK_LOCAL_DEV=1 cargo test -- --test-threads=1
+            '';
+
+          "validate-scml" = mkApp "asterinas-validate-scml"
+            "Validate SCML files with sctrace." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              mapfile -t ASTER_SCML < <(find ./book/src/kernel/linux-compatibility/ -name "*.scml")
+              ./tools/sctrace.sh "''${ASTER_SCML[@]}" -- echo "Asterinas"
             '';
 
           ktest = mkApp "asterinas-ktest"
@@ -447,6 +591,9 @@
         run_iso = apps."run-iso";
         nixos = apps."install-nixos";
         run_nixos = apps."run-nixos";
+        check_osdk = apps."check-osdk";
+        test_osdk = apps."test-osdk";
+        validate_scml = apps."validate-scml";
       };
     };
 }

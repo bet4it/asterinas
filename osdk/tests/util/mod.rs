@@ -17,6 +17,7 @@ pub fn cargo_osdk<T: AsRef<OsStr>, I: IntoIterator<Item = T> + Copy>(args: I) ->
     let mut command = Command::cargo_bin("cargo-osdk").unwrap();
     command.arg("osdk");
     command.args(args);
+    command.env_remove("CARGO_TARGET_DIR");
     conditionally_add_tdx_args(&mut command, args);
     command
 }

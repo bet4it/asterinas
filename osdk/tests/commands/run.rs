@@ -193,7 +193,7 @@ mod qemu_gdb_feature {
                 .join("target")
                 .join("osdk")
                 .join(kernel_name)
-                .join(format!("{}-osdk-bin", kernel_name));
+                .join(format!("{}-osdk-bin.qemu_elf", kernel_name));
             let _gdb = std::thread::spawn(move || {
                 while !bin_file_path.exists() {
                     sleep(std::time::Duration::from_secs(1));
