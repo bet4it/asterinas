@@ -235,6 +235,38 @@
         nixfmt "$ASTERINAS_DIR/distro"
       '';
 
+      prepareNixosConfig = ''
+        prepare_nixos_config() {
+          local base_config="$ASTERINAS_DIR/distro/etc_nixos/''${CONFIG_FILE_NAME:-configuration.nix}"
+
+          if [ -z "''${NIXOS_TEST_SUITE:-}" ]; then
+            export NIXOS_CONFIG_PATH="$base_config"
+            return
+          fi
+
+          local test_dir="$ASTERINAS_DIR/test/nixos/tests/$NIXOS_TEST_SUITE"
+          local extra_config="$test_dir/extra_config.nix"
+          local test_config="$NIXOS_DIR/etc_nixos/$NIXOS_TEST_SUITE-configuration.nix"
+
+          if [ ! -d "$test_dir" ]; then
+            echo "Error: NixOS test suite '$NIXOS_TEST_SUITE' does not exist." >&2
+            exit 1
+          fi
+
+          mkdir -p "$(dirname "$test_config")"
+          if [ -f "$extra_config" ]; then
+            "$ASTERINAS_DIR/test/nixos/common/merge_nixos_config.sh" \
+              "$base_config" \
+              "$extra_config" \
+              "$test_config"
+          else
+            cp "$base_config" "$test_config"
+          fi
+
+          export NIXOS_CONFIG_PATH="$test_config"
+        }
+      '';
+
       buildArgs = ''
         --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
         --kcmd-args="console=''${CONSOLE:-hvc0}" \
@@ -390,12 +422,15 @@
                 --kcmd-args="console=''${CONSOLE:-hvc0}" \
                 --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
+              ${prepareNixosConfig}
+              prepare_nixos_config
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
               mkdir -p "$NIXOS_DIR"
               nix-build distro/iso_image \
                 --argstr target_platform "$NIX_SYSTEM" \
                 --arg autoInstall "''${AUTO_INSTALL:-true}" \
                 --argstr config-file-name "''${CONFIG_FILE_NAME:-configuration.nix}" \
+                --argstr config-path "$NIXOS_CONFIG_PATH" \
                 --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
                 --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
                 --argstr version "$(cat VERSION)" \
@@ -425,6 +460,8 @@
                 --kcmd-args="console=''${CONSOLE:-hvc0}" \
                 --initramfs="$OSDK_INITRAMFS_PATH"
               cd "$ASTERINAS_DIR"
+              ${prepareNixosConfig}
+              prepare_nixos_config
               NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
               mkdir -p "$NIXOS_DIR"
               nix-build distro/aster_nixos_installer/default.nix \
@@ -433,18 +470,18 @@
                 --argstr stage-2-hook "''${NIXOS_STAGE_2_INIT:-/bin/sh -l}" \
                 --argstr log-level "''${LOG_LEVEL:-error}" \
                 --argstr console "''${CONSOLE:-hvc0}" \
+                --argstr config-path "$NIXOS_CONFIG_PATH" \
                 --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
                 --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
                 --out-link "$NIXOS_DIR/aster-nixos-installer"
               DISK_IMAGE="$NIXOS_DIR/asterinas.img"
               DISK_SIZE_MB="''${NIXOS_DISK_SIZE_IN_MB:-8192}"
-              CONFIG_PATH="distro/etc_nixos/''${CONFIG_FILE_NAME:-configuration.nix}"
               if [ ! -e "$DISK_IMAGE" ]; then
                 fallocate -l "$DISK_SIZE_MB"M "$DISK_IMAGE"
               fi
               DISK="$(losetup -fP --show "$DISK_IMAGE")"
               trap 'losetup -d "$DISK" 2>/dev/null || true' EXIT INT TERM ERR
-              "$NIXOS_DIR/aster-nixos-installer/bin/aster-nixos-install" --config "$CONFIG_PATH" --disk "$DISK"
+              "$NIXOS_DIR/aster-nixos-installer/bin/aster-nixos-install" --config "$NIXOS_CONFIG_PATH" --disk "$DISK"
             '';
 
           "run-nixos" = mkApp "asterinas-run-nixos"
@@ -453,7 +490,24 @@
               export OVMF="''${OVMF:-on}"
               export ENABLE_KVM="''${ENABLE_KVM:-1}"
               cd "$ASTERINAS_DIR"
-              ./tools/nixos/run.sh nixos
+              if [ -n "''${NIXOS_TEST_SUITE:-}" ]; then
+                TEST_DIR="$ASTERINAS_DIR/test/nixos/tests/$NIXOS_TEST_SUITE"
+                if [ ! -d "$TEST_DIR" ]; then
+                  echo "Error: NixOS test suite '$NIXOS_TEST_SUITE' does not exist." >&2
+                  exit 1
+                fi
+                TEST_CASE_ARGS=()
+                if [ -n "''${NIXOS_TEST_CASE:-}" ]; then
+                  TEST_CASE_ARGS+=(--test "$NIXOS_TEST_CASE")
+                fi
+                QEMU_CMD="bash $ASTERINAS_DIR/tools/nixos/run.sh nixos"
+                (
+                  cd "$TEST_DIR"
+                  cargo run -- --qemu-cmd "$QEMU_CMD" "''${TEST_CASE_ARGS[@]}"
+                )
+              else
+                ./tools/nixos/run.sh nixos
+              fi
             '';
 
           test = mkApp "asterinas-test"
