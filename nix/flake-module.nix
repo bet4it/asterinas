@@ -157,13 +157,6 @@
         }
       '';
 
-      kvmFlag = ''
-        KVM_ARG=""
-        if [ "''${ENABLE_KVM:-1}" = "1" ] && [ "''${TARGET_ARCH:-x86_64}" = "x86_64" ] && [ -e /dev/kvm ]; then
-          KVM_ARG="--qemu-args=-accel kvm"
-        fi
-      '';
-
       configureAutoTest = ''
         EXTRA_OSDK_ARGS=()
 
@@ -206,6 +199,110 @@
             exit 1
             ;;
         esac
+      '';
+
+      configureOsdkArgs = ''
+        OSDK_COMMON_ARGS=()
+        OSDK_BUILD_ARGS=(
+          --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}"
+          --kcmd-args="console=''${CONSOLE:-hvc0}"
+        )
+        OSDK_TEST_ARGS=(
+          --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}"
+          --kcmd-args="console=''${CONSOLE:-ttyS0}"
+        )
+
+        TARGET="''${TARGET_ARCH:-x86_64}"
+        BOOT_METHOD_VALUE="''${BOOT_METHOD:-grub-rescue-iso}"
+        BOOT_PROTOCOL_VALUE="''${BOOT_PROTOCOL:-multiboot2}"
+        SCHEME_VALUE="''${SCHEME:-}"
+
+        if [ "''${RELEASE_LTO:-0}" = "1" ]; then
+          OSDK_COMMON_ARGS+=(--profile release-lto)
+          export OSTD_TASK_STACK_SIZE_IN_PAGES="''${OSTD_TASK_STACK_SIZE_IN_PAGES:-8}"
+        elif [ "''${RELEASE:-0}" = "1" ]; then
+          OSDK_COMMON_ARGS+=(--release)
+          if [ "$TARGET" = "riscv64" ]; then
+            export OSTD_TASK_STACK_SIZE_IN_PAGES="''${OSTD_TASK_STACK_SIZE_IN_PAGES:-16}"
+          else
+            export OSTD_TASK_STACK_SIZE_IN_PAGES="''${OSTD_TASK_STACK_SIZE_IN_PAGES:-8}"
+          fi
+        else
+          export OSTD_TASK_STACK_SIZE_IN_PAGES="''${OSTD_TASK_STACK_SIZE_IN_PAGES:-64}"
+        fi
+
+        if [ "''${BENCHMARK:-none}" != "none" ]; then
+          OSDK_BUILD_ARGS+=(--init-args="/benchmark/common/bench_runner.sh ''${BENCHMARK} asterinas")
+        fi
+
+        if [ "''${INTEL_TDX:-0}" = "1" ]; then
+          BOOT_PROTOCOL_VALUE="linux-efi-handover64"
+          OSDK_COMMON_ARGS+=(--scheme tdx)
+        else
+          if [ "$BOOT_PROTOCOL_VALUE" = "multiboot" ]; then
+            BOOT_METHOD_VALUE="qemu-direct"
+          fi
+          if [ "$SCHEME_VALUE" = "microvm" ]; then
+            BOOT_METHOD_VALUE="qemu-direct"
+          fi
+
+          if [ -z "$SCHEME_VALUE" ]; then
+            case "$TARGET" in
+              riscv64) SCHEME_VALUE="riscv" ;;
+              loongarch64) SCHEME_VALUE="loongarch" ;;
+            esac
+          fi
+
+          if [ -n "$SCHEME_VALUE" ]; then
+            OSDK_COMMON_ARGS+=(--scheme "$SCHEME_VALUE")
+          else
+            OSDK_COMMON_ARGS+=(--boot-method="$BOOT_METHOD_VALUE")
+          fi
+        fi
+
+        if [ "''${COVERAGE:-0}" = "1" ]; then
+          OSDK_COMMON_ARGS+=(--coverage)
+        fi
+        if [ -n "''${FEATURES:-}" ]; then
+          OSDK_COMMON_ARGS+=(--features="''${FEATURES}")
+        fi
+        if [ "''${NO_DEFAULT_FEATURES:-0}" = "1" ]; then
+          OSDK_COMMON_ARGS+=(--no-default-features)
+        fi
+
+        case "$BOOT_PROTOCOL_VALUE" in
+          linux-efi-handover64)
+            OSDK_COMMON_ARGS+=(
+              --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue"
+              --grub-boot-protocol="linux"
+            )
+            ;;
+          linux-efi-pe64)
+            OSDK_COMMON_ARGS+=(--grub-boot-protocol="linux")
+            ;;
+          linux-legacy32)
+            OSDK_COMMON_ARGS+=(
+              --linux-x86-legacy-boot
+              --grub-boot-protocol="linux"
+              --strip-elf
+            )
+            ;;
+          *)
+            OSDK_COMMON_ARGS+=(--grub-boot-protocol="$BOOT_PROTOCOL_VALUE")
+            ;;
+        esac
+
+        if [ "''${ENABLE_KVM:-1}" = "1" ] && [ "$TARGET" = "x86_64" ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+          OSDK_COMMON_ARGS+=(--qemu-args="-accel kvm")
+        fi
+
+        OSDK_COMMON_ARGS+=(
+          --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue"
+          --initramfs="''${OSDK_INITRAMFS_PATH:-$INITRAMFS_BUILD_DIR/initramfs.cpio.gz}"
+        )
+
+        OSDK_BUILD_ARGS+=("''${OSDK_COMMON_ARGS[@]}")
+        OSDK_TEST_ARGS+=("''${OSDK_COMMON_ARGS[@]}")
       '';
 
       workspaceLintCheck = ''
@@ -265,16 +362,6 @@
 
           export NIXOS_CONFIG_PATH="$test_config"
         }
-      '';
-
-      buildArgs = ''
-        --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
-        --kcmd-args="console=''${CONSOLE:-hvc0}" \
-        --boot-method="''${BOOT_METHOD:-grub-rescue-iso}" \
-        --grub-boot-protocol="''${BOOT_PROTOCOL:-multiboot2}" \
-        --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
-        --initramfs="''${OSDK_INITRAMFS_PATH:-$INITRAMFS_BUILD_DIR/initramfs.cpio.gz}" \
-        "$KVM_ARG"
       '';
 
       ensureInitramfs = ''
@@ -393,9 +480,9 @@
               ${appPrelude}
               ${configureAutoTest}
               ${ensureInitramfs}
-              ${kvmFlag}
+              ${configureOsdkArgs}
               cd "$ASTERINAS_DIR/kernel"
-              cargo osdk build ${buildArgs} "''${EXTRA_OSDK_ARGS[@]}"
+              cargo osdk build "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}"
             '';
 
           "run-kernel" = mkApp "asterinas-run-kernel"
@@ -403,9 +490,9 @@
               ${appPrelude}
               ${configureAutoTest}
               ${ensureInitramfs}
-              ${kvmFlag}
+              ${configureOsdkArgs}
               cd "$ASTERINAS_DIR/kernel"
-              cargo osdk run ${buildArgs} "''${EXTRA_OSDK_ARGS[@]}"
+              cargo osdk run "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}"
             '';
 
           iso =
@@ -627,17 +714,9 @@
             "Run kernel-mode unit tests through cargo-osdk." ''
               ${appPrelude}
               ${ensureInitramfs}
-              ${kvmFlag}
+              ${configureOsdkArgs}
               cd "$ASTERINAS_DIR"
-              CONSOLE="''${CONSOLE:-ttyS0}"
-              cargo osdk test \
-                --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
-                --kcmd-args="console=$CONSOLE" \
-                --boot-method="''${BOOT_METHOD:-grub-rescue-iso}" \
-                --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
-                --grub-boot-protocol="''${BOOT_PROTOCOL:-multiboot2}" \
-                --initramfs="$OSDK_INITRAMFS_PATH" \
-                "$KVM_ARG"
+              cargo osdk test "''${OSDK_TEST_ARGS[@]}"
             '';
         };
       in apps // {
