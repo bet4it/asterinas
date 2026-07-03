@@ -491,6 +491,7 @@
             "Build and run the Asterinas kernel in QEMU." ''
               ${appPrelude}
               ${configureAutoTest}
+              export BOOT_METHOD="''${BOOT_METHOD:-qemu-direct}"
               ${ensureInitramfs}
               ${configureOsdkArgs}
               cd "$ASTERINAS_DIR/kernel"
