@@ -820,6 +820,7 @@
           ktest = mkApp "asterinas-ktest"
             "Run kernel-mode unit tests through cargo-osdk." ''
               ${appPrelude}
+              export BOOT_METHOD="''${BOOT_METHOD:-qemu-direct}"
               ${ensureInitramfs}
               ${configureOsdkArgs}
               cd "$ASTERINAS_DIR"
