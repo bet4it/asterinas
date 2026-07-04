@@ -158,6 +158,7 @@
             *) echo "Unsupported target architecture: $1" >&2; return 1 ;;
           esac
         }
+
       '';
 
       configureAutoTest = ''
@@ -424,6 +425,42 @@
           --out-link cachix.list
       '';
 
+      buildNixosDiskImage = ''
+        export CONSOLE="''${CONSOLE:-ttyS0}"
+        ${ensureInitramfs}
+        cd "$ASTERINAS_DIR/kernel"
+        cargo osdk build \
+          --release \
+          --boot-method="grub-rescue-iso" \
+          --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
+          --grub-boot-protocol="linux" \
+          --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
+          --kcmd-args="console=''${CONSOLE:-hvc0}" \
+          --initramfs="$OSDK_INITRAMFS_PATH"
+        OSDK_KERNEL_PATH="$CARGO_TARGET_DIR/osdk/iso_root/boot/aster-kernel-osdk-bin"
+        if [ ! -e "$OSDK_KERNEL_PATH" ]; then
+          echo "Error: cargo-osdk did not produce $OSDK_KERNEL_PATH." >&2
+          exit 1
+        fi
+        cd "$ASTERINAS_DIR"
+        ${prepareNixosConfig}
+        prepare_nixos_config
+        NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
+        mkdir -p "$NIXOS_DIR"
+        nix-build distro/nixos_image \
+          --argstr target_platform "$NIX_SYSTEM" \
+          --argstr config-file-name "''${CONFIG_FILE_NAME:-configuration.nix}" \
+          --argstr config-path "$NIXOS_CONFIG_PATH" \
+          --arg aster-kernel-path "$OSDK_KERNEL_PATH" \
+          --argstr console "''${CONSOLE:-ttyS0}" \
+          --arg diskSize "''${NIXOS_DISK_SIZE_IN_MB:-8192}" \
+          --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
+          --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
+          --out-link "$NIXOS_DIR/nixos_image"
+        cp --reflink=auto "$NIXOS_DIR/nixos_image/asterinas.img" "$NIXOS_DIR/asterinas.img"
+        chmod u+w "$NIXOS_DIR/asterinas.img"
+      '';
+
       ensureInitramfs = ''
         BUILD_DIR="$INITRAMFS_BUILD_DIR"
         TARGET="''${TARGET_ARCH:-x86_64}"
@@ -576,48 +613,9 @@
             '';
 
           "install-nixos" = mkApp "asterinas-install-nixos"
-            "Install Asterinas NixOS into a local disk image." ''
+            "Build an Asterinas NixOS disk image." ''
               ${appPrelude}
-              export CONSOLE="''${CONSOLE:-ttyS0}"
-              ${ensureInitramfs}
-              cd "$ASTERINAS_DIR/kernel"
-              cargo osdk build \
-                --release \
-                --boot-method="grub-rescue-iso" \
-                --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
-                --grub-boot-protocol="linux" \
-                --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
-                --kcmd-args="console=''${CONSOLE:-hvc0}" \
-                --initramfs="$OSDK_INITRAMFS_PATH"
-              OSDK_KERNEL_PATH="$CARGO_TARGET_DIR/osdk/iso_root/boot/aster-kernel-osdk-bin"
-              if [ ! -e "$OSDK_KERNEL_PATH" ]; then
-                echo "Error: cargo-osdk did not produce $OSDK_KERNEL_PATH." >&2
-                exit 1
-              fi
-              cd "$ASTERINAS_DIR"
-              ${prepareNixosConfig}
-              prepare_nixos_config
-              NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
-              mkdir -p "$NIXOS_DIR"
-              nix-build distro/aster_nixos_installer/default.nix \
-                --argstr target_platform "$NIX_SYSTEM" \
-                --argstr disable-systemd "''${NIXOS_DISABLE_SYSTEMD:-false}" \
-                --argstr stage-2-hook "''${NIXOS_STAGE_2_INIT:-/bin/sh -l}" \
-                --argstr log-level "''${LOG_LEVEL:-error}" \
-                --argstr console "''${CONSOLE:-hvc0}" \
-                --argstr config-path "$NIXOS_CONFIG_PATH" \
-                --arg aster-kernel-path "$OSDK_KERNEL_PATH" \
-                --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
-                --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
-                --out-link "$NIXOS_DIR/aster-nixos-installer"
-              DISK_IMAGE="$NIXOS_DIR/asterinas.img"
-              DISK_SIZE_MB="''${NIXOS_DISK_SIZE_IN_MB:-8192}"
-              if [ ! -e "$DISK_IMAGE" ]; then
-                fallocate -l "$DISK_SIZE_MB"M "$DISK_IMAGE"
-              fi
-              DISK="$(losetup -fP --show "$DISK_IMAGE")"
-              trap 'losetup -d "$DISK" 2>/dev/null || true' EXIT INT TERM ERR
-              "$NIXOS_DIR/aster-nixos-installer/bin/aster-nixos-install" --config "$NIXOS_CONFIG_PATH" --disk "$DISK"
+              ${buildNixosDiskImage}
             '';
 
           "run-nixos" = mkApp "asterinas-run-nixos"

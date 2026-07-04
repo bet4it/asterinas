@@ -18,19 +18,17 @@ on:
 jobs:
   iso-test:
     runs-on: ubuntu-4-cores-150GB-ssd
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Build Asterinas NixOS ISO installer image
         run: |
           NIXOS_TEST_SUITE=hello nix run .#iso --no-write-lock-file
       - name: Run ISO image and install Asterinas NixOS
         run: |
           nix run .#run-iso --no-write-lock-file || true
-          tail --lines 10 qemu.log | grep -q "^Installation finished" || (echo "Test ISO failed" && exit 1)
+          tail --lines 10 .nix-run/qemu.log | grep -q "^Installation finished" || (echo "Test ISO failed" && exit 1)
           echo "Test ISO succeeds!"
       - name : Run Asterinas NixOS
         run: |

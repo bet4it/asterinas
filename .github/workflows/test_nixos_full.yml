@@ -185,12 +185,9 @@ jobs:
           remove_haskell: true
           remove_tool_cache: true
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run the ${{ matrix.test.name }} test on AsterNixOS
         timeout-minutes: ${{ matrix.test.timeout_minutes || 30 }}
-        uses: maus007/docker-run-action-fork@v1
-        with:
-          image: asterinas/asterinas:0.18.0-20260702
-          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
-          run: |
-            NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }} nix run .#install-nixos --no-write-lock-file
-            NIXOS_TEST_SUITE=${{ matrix.test.name }} nix run .#run-nixos --no-write-lock-file
+        run: |
+          NIXOS_TEST_SUITE=${{ matrix.test.name }} NIXOS_DISK_SIZE_IN_MB=${{ matrix.test.disk_size }} nix run .#install-nixos --no-write-lock-file
+          NIXOS_TEST_SUITE=${{ matrix.test.name }} nix run .#run-nixos --no-write-lock-file

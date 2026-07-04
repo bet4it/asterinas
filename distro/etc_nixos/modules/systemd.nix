@@ -17,6 +17,16 @@
   services.timesyncd.enable = false;
   services.udev.enable = false;
 
+  system.activationScripts.asterinasUnixChkpwdWrapper = {
+    deps = [ "specialfs" ];
+    text = ''
+      ${pkgs.coreutils}/bin/install -D -o 0 -g 0 -m 4755 \
+        ${pkgs.pam}/bin/unix_chkpwd \
+        /run/wrappers/bin/unix_chkpwd
+    '';
+  };
+  systemd.services.suid-sgid-wrappers.enable = false;
+
   services.getty.autologinUser = "root";
   users.users.root = {
     shell = "${pkgs.bash}/bin/bash";
@@ -31,12 +41,12 @@
       "autovt@hvc0.service")
     ++ (lib.optional (config.aster_nixos.console == "ttyS0")
       "serial-getty@ttyS0.service") ++ [
-      "autovt@tty2.service"
-      "autovt@tty3.service"
-      "autovt@tty4.service"
-      "autovt@tty5.service"
-      "autovt@tty6.service"
-    ];
+        "autovt@tty2.service"
+        "autovt@tty3.service"
+        "autovt@tty4.service"
+        "autovt@tty5.service"
+        "autovt@tty6.service"
+      ];
 
   systemd.services."autovt@hvc0".wantedBy =
     lib.optional (config.aster_nixos.console == "hvc0") "getty.target";

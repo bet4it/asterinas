@@ -32,12 +32,9 @@ jobs:
           remove_haskell: true
           remove_tool_cache: true
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run the hello test on AsterNixOS
         timeout-minutes: 30
-        uses: maus007/docker-run-action-fork@v1
-        with:
-          image: asterinas/asterinas:0.18.0-20260702
-          options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
-          run: |
-            NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144 nix run .#install-nixos --no-write-lock-file
-            NIXOS_TEST_SUITE=hello nix run .#run-nixos --no-write-lock-file
+        run: |
+          NIXOS_TEST_SUITE=hello NIXOS_DISK_SIZE_IN_MB=6144 nix run .#install-nixos --no-write-lock-file
+          NIXOS_TEST_SUITE=hello nix run .#run-nixos --no-write-lock-file
