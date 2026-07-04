@@ -26,29 +26,23 @@ on the Asterinas kernel.
 The following instructions describe how to install Asterinas NixOS in a VM
 using the Asterinas NixOS installer ISO.
 
-1. Launch an x86-64 Ubuntu container:
+1. Use an x86-64 Linux host and install QEMU:
 
     ```bash
-    docker run -it --privileged --network=host ubuntu:latest bash
+    sudo apt update
+    sudo apt install -y qemu-system-x86 qemu-utils
     ```
 
-2. Inside the container, install QEMU:
+2. Download the latest Asterinas NixOS installer ISO from [GitHub Releases](https://github.com/asterinas/asterinas/releases).
 
-    ```bash
-    apt update
-    apt install -y qemu-system-x86 qemu-utils
-    ```
-
-3. Download the latest Asterinas NixOS installer ISO from [GitHub Releases](https://github.com/asterinas/asterinas/releases).
-
-4. Create a file that will be used as the target disk to install Asterinas NixOS:
+3. Create a file that will be used as the target disk to install Asterinas NixOS:
 
     ```bash
     # The capacity of the disk is 10GB; adjust it as you see fit
     dd if=/dev/zero of=aster_nixos_disk.img bs=1G count=10
     ```
 
-5. Start an x86-64 VM with two drives:
+4. Start an x86-64 VM with two drives:
 one is the installer CD-ROM and the other is the target disk:
 
     ```bash
@@ -65,7 +59,7 @@ one is the installer CD-ROM and the other is the target disk:
 
     After the VM boots, you now have access to the installation environment.
 
-6. Edit the `configuration.nix` file in the home directory
+5. Edit the `configuration.nix` file in the home directory
 to customize the NixOS system to be installed:
 
     ```bash
@@ -80,7 +74,7 @@ to customize the NixOS system to be installed:
     Not all combinations of settings in `configuration.nix` are supported by Asterinas NixOS yet.
     The ones that have been tested are documented in the subsequent chapters.
 
-7. Start installation:
+6. Start installation:
 
     ```bash
     aster-nixos-install --config configuration.nix --disk /dev/vda --force-format-disk
@@ -90,7 +84,7 @@ to customize the NixOS system to be installed:
     and may take around 30 minutes to complete,
     depending on your network speed.
 
-8. After the installation is complete, you can shut down the VM:
+7. After the installation is complete, you can shut down the VM:
 
     ```bash
     poweroff
@@ -98,7 +92,7 @@ to customize the NixOS system to be installed:
     
     Now Asterinas NixOS is installed in `aster_nixos_disk.img`.
 
-9. Start a VM to boot the newly installed Asterinas NixOS:
+8. Start a VM to boot the newly installed Asterinas NixOS:
 
     ```bash
     qemu-system-x86_64 \
@@ -123,21 +117,20 @@ to customize the NixOS system to be installed:
 1. Follow Steps 1 and 2 in the ["Getting started" section of the Asterinas Kernel](../kernel/#getting-started)
    to set up the development environment.
 
-2. Inside the Docker container,
-generate a disk image with Asterinas NixOS installed using this command:
+2. Generate a disk image with Asterinas NixOS installed using this command:
 
     ```bash
-    make nixos
+    nix run .#install-nixos
     ```
 
     or this command:
     
     ```bash
-    make iso && make run_iso
+    nix run .#iso && nix run .#run-iso
     ```
 
     The difference between the two methods is that
-    the first installs NixOS to a disk image entirely inside the container,
+    the first builds a NixOS disk image directly from Nix,
     whereas the second emulates the manual ISO installation steps
     (see the [previous section](#end-users))
     by running a VM.
@@ -146,5 +139,5 @@ generate a disk image with Asterinas NixOS installed using this command:
 3. Start a VM to run the installed Asterinas NixOS:
 
     ```bash
-    make run_nixos
+    nix run .#run-nixos
     ```

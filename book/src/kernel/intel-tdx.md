@@ -63,17 +63,17 @@ The following result is an example:
     git clone https://github.com/asterinas/asterinas
     ```
 
-2. Run a Docker container as the development environment.
+2. Enter the Nix development environment.
 
     ```bash
-    docker run -it --privileged --network=host -v /dev:/dev -v $(pwd)/asterinas:/root/asterinas asterinas/asterinas:0.18.0-20260702
+    cd asterinas
+    nix develop
     ```
     
-3. Inside the container,
-go to the project folder to build and run Asterinas.
+3. Build and run Asterinas.
 
     ```bash
-    make run_kernel INTEL_TDX=1
+    INTEL_TDX=1 nix run .#run-kernel
     ```
 
 If everything goes well,

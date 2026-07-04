@@ -5,11 +5,10 @@
 Asterinas consists of many crates,
 some of which do not require a VM environment
 and can be tested with the standard `cargo test`.
-They are listed in the root `Makefile`
-and can be tested together through the following Make command.
+They can be tested together through the following Nix command.
 
 ```bash
-make test
+nix run .#test
 ```
 
 To test an individual crate, enter the directory of the crate and invoke `cargo test`.
@@ -20,7 +19,7 @@ Many crates in Asterinas do require a VM environment to be tested.
 The unit tests for these crates are empowered by OSDK.
 
 ```bash
-make ktest
+nix run .#ktest
 ```
 
 To test an individual crate in kernel mode, enter the directory of the crate and invoke `cargo osdk test`.
@@ -37,7 +36,7 @@ cargo osdk test
 The following command builds and runs the regression test in `test/initramfs/src/regression` on Asterinas.
 
 ```bash
-make run_kernel AUTO_TEST=regression
+AUTO_TEST=regression nix run .#run-kernel
 ```
 
 ### Conformance test
@@ -45,13 +44,13 @@ make run_kernel AUTO_TEST=regression
 The following command builds and runs the conformance test on Asterinas.
 
 ```bash
-make run_kernel AUTO_TEST=conformance
+AUTO_TEST=conformance nix run .#run-kernel
 ```
 
 To run conformance test interactively, start an instance of Asterinas with the conformance tests built and installed.
 
 ```bash
-make run_kernel ENABLE_CONFORMANCE_TEST=true
+ENABLE_CONFORMANCE_TEST=true nix run .#run-kernel
 ```
 
 Then, in the interactive shell, run the following script to start the conformance test.

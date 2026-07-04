@@ -31,7 +31,7 @@ we are steadfastly progressing towards our goal.
 Asterinas targets modern, 64-bit platforms only.
 
 A **development platform** is where you build and test Asterinas
-(i.e., the host machine running the Docker-based development environment).
+(i.e., the host machine running the Nix-based development environment).
 
 | Development Platform |
 | -------------------- |
@@ -62,7 +62,7 @@ Tier definitions:
 
 ## Getting started
 
-Get yourself an x86-64 (or ARM64) Linux machine with Docker installed.
+Get yourself an x86-64 (or ARM64) Linux machine with Nix installed.
 Follow the three simple steps below to get Asterinas up and running.
 
 <!-- REMINDER: Be careful when editing the first two steps
@@ -73,25 +73,21 @@ since `distro/README.md` references them -->
     git clone https://github.com/asterinas/asterinas
     ```
 
-2. Run a Docker container as the development environment.
+2. Enter the Nix development environment.
 
     ```bash
-    docker run -it --privileged \
-                --network=host \
-                -v /dev:/dev \
-                -v $(pwd)/asterinas:/root/asterinas \
-                asterinas/asterinas:0.18.0-20260702
+    cd asterinas
+    nix develop
     ```
 
-    Alternatively, if you use VS Code with the
-    [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-    extension, open the cloned folder and select "Reopen in Container".
+    The flake provides the pinned Rust toolchain, `cargo-osdk`, QEMU,
+    and the host utilities used by the project.
 
-3. Inside the container, go to the project folder to build and run Asterinas.
+3. Build and run Asterinas.
 
     ```bash
-    make kernel
-    make run_kernel
+    nix run .#kernel
+    nix run .#run-kernel
     ```
 
 If everything goes well, Asterinas is now up and running inside a VM.

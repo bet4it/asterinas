@@ -151,22 +151,21 @@ Follow the steps below to get Asterinas up and running.
     git clone https://github.com/asterinas/asterinas
     ```
 
-2. Run a Docker container as the development environment:
+2. Enter the Nix development environment:
 
     ```bash
-    docker run -it --privileged --network=host -v /dev:/dev -v $(pwd)/asterinas:/root/asterinas asterinas/asterinas:0.18.0-20260702
+    cd asterinas
+    nix develop
     ```
 
-    Alternatively, if you use VS Code with the
-    [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-    extension, open the cloned folder and select "Reopen in Container".
+    The flake provides the Rust toolchain, `cargo-osdk`, QEMU,
+    formatting tools, and the host utilities used by the project.
 
-3. Inside the container,
-go to the project folder (`/root/asterinas`) and run:
+3. Build and run Asterinas:
 
     ```bash
-    make kernel
-    make run_kernel
+    nix run .#kernel
+    nix run .#run-kernel
     ```
 
     This results in a VM running the Asterinas kernel with a small initramfs.
@@ -175,8 +174,8 @@ go to the project folder (`/root/asterinas`) and run:
 build and run Asterinas NixOS in a VM:
 
     ```bash
-    make nixos
-    make run_nixos
+    nix run .#install-nixos
+    nix run .#run-nixos
     ```
     
     This boots into an interactive shell in Asterinas NixOS,

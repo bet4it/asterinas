@@ -19,25 +19,24 @@ the kernel (`kernel/`) is entirely safe Rust.
 
 ## Building and Running
 
-All development is done inside the project Docker container:
+All development is done through the project flake:
 
 ```bash
-docker run -it --privileged --network=host -v /dev:/dev \
-  -v $(pwd)/asterinas:/root/asterinas \
-  asterinas/asterinas:0.18.0-20260702
+cd asterinas
+nix develop
 ```
 
-Key Makefile targets:
+Key Nix commands:
 
 | Command              | What it does                                         |
 |----------------------|------------------------------------------------------|
-| `make kernel`        | Build initramfs and the kernel                       |
-| `make run_kernel`    | Build and run in QEMU                                |
-| `make test`          | Unit tests for non-OSDK crates (`cargo test`)        |
-| `make ktest`         | Kernel-mode unit tests via `cargo osdk test` in QEMU |
-| `make check`         | Full lint: rustfmt, clippy, typos, license checks    |
-| `make format`        | Auto-format Rust, Nix, and C code                    |
-| `make docs`          | Build rustdocs for all crates                        |
+| `nix run .#kernel`   | Build initramfs and the kernel                       |
+| `nix run .#run-kernel` | Build and run in QEMU                              |
+| `nix run .#test`     | Unit tests for non-OSDK crates (`cargo test`)        |
+| `nix run .#ktest`    | Kernel-mode unit tests via `cargo osdk test` in QEMU |
+| `nix run .#check`    | Full lint: rustfmt, clippy, typos, license checks    |
+| `nix run .#format`   | Auto-format Rust, Nix, and C code                    |
+| `nix run .#docs`     | Build rustdocs for all crates                        |
 
 Set `TARGET_ARCH` to `x86_64` (default), `riscv64`, or `loongarch64`.
 
@@ -144,7 +143,7 @@ Below is a condensed summary of the most important rules.
 
 ## CI
 
-CI runs in the project Docker container with KVM.
+CI runs the project through Nix commands with KVM where available.
 Key test matrices:
 - x86-64: lint, compile, usermode tests, kernel tests, integration tests
   (boot, syscall, general), multiple boot protocols, SMP configurations.

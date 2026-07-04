@@ -110,7 +110,7 @@ The following environment variables are automatically provided **when building t
 You can enable them by building with:
 
 ```bash
-make nixos NIXOS_TEST_SUITE=containerization-and-virtualization
+NIXOS_TEST_SUITE=containerization-and-virtualization nix run .#install-nixos
 ```
 
 #### Verified Usage
@@ -150,5 +150,5 @@ qemu-system-$(uname -m) \
 > **Note**: Running the Asterinas kernel requires the `linux/multiboot` boot protocol (**multiboot2 is not supported**).
 > Compile Asterinas with:
 > ```bash
-> make nixos BOOT_PROTOCOL=linux NIXOS_TEST_SUITE=containerization-and-virtualization
+> BOOT_PROTOCOL=linux NIXOS_TEST_SUITE=containerization-and-virtualization nix run .#install-nixos
 > ```
