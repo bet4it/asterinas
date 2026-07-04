@@ -39,11 +39,21 @@ fi
 VIRTIOFS_TAG=${VIRTIOFS_TAG:-"aster-virtiofs"}
 VIRTIOFS_SOCKET=${VIRTIOFS_SOCKET:-"/tmp/vhostqemu/vfs.sock"}
 
+USED_HOST_PORTS=""
+
+is_used_host_port() {
+    case " $USED_HOST_PORTS " in
+        *" $1 "*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 pick_unused_port() {
     local port
     for _ in $(seq 1 100); do
         port=$(shuf -i 1024-65535 -n 1)
-        if ! (echo > /dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+        if ! is_used_host_port "$port" && \
+            ! (echo > /dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
             echo "$port"
             return 0
         fi
@@ -53,13 +63,33 @@ pick_unused_port() {
     return 1
 }
 
-SSH_RAND_PORT=${SSH_PORT:-$(pick_unused_port)}
-NGINX_RAND_PORT=${NGINX_PORT:-$(pick_unused_port)}
-REDIS_RAND_PORT=${REDIS_PORT:-$(pick_unused_port)}
-IPERF_RAND_PORT=${IPERF_PORT:-$(pick_unused_port)}
-LMBENCH_TCP_LAT_RAND_PORT=${LMBENCH_TCP_LAT_PORT:-$(pick_unused_port)}
-LMBENCH_TCP_BW_RAND_PORT=${LMBENCH_TCP_BW_PORT:-$(pick_unused_port)}
-MEMCACHED_RAND_PORT=${MEMCACHED_PORT:-$(pick_unused_port)}
+assign_host_port() {
+    local result_var=$1
+    local env_var=$2
+    local port
+
+    if [ -n "${!env_var:-}" ]; then
+        port="${!env_var}"
+    else
+        port=$(pick_unused_port)
+    fi
+
+    if is_used_host_port "$port"; then
+        echo "Host TCP port $port is assigned more than once." >&2
+        return 1
+    fi
+
+    USED_HOST_PORTS="$USED_HOST_PORTS $port"
+    printf -v "$result_var" '%s' "$port"
+}
+
+assign_host_port SSH_RAND_PORT SSH_PORT || exit 1
+assign_host_port NGINX_RAND_PORT NGINX_PORT || exit 1
+assign_host_port REDIS_RAND_PORT REDIS_PORT || exit 1
+assign_host_port IPERF_RAND_PORT IPERF_PORT || exit 1
+assign_host_port LMBENCH_TCP_LAT_RAND_PORT LMBENCH_TCP_LAT_PORT || exit 1
+assign_host_port LMBENCH_TCP_BW_RAND_PORT LMBENCH_TCP_BW_PORT || exit 1
+assign_host_port MEMCACHED_RAND_PORT MEMCACHED_PORT || exit 1
 
 # Optional QEMU arguments. Opt in them manually if needed.
 # QEMU_OPT_ARG_DUMP_PACKETS="-object filter-dump,id=filter0,netdev=net01,file=virtio-net.pcap"
