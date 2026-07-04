@@ -18,12 +18,10 @@ on:
 jobs:
   push-pkgs:
     runs-on: ubuntu-4-cores-150GB-ssd
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
 
       - name: Modify configuration.nix to include xfce and podman
         run: |

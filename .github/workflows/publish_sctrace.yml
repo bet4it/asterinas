@@ -16,19 +16,17 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    container: asterinas/asterinas:0.18.0-20260702
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
 
       - name: Publish sctrace (dry run)
         # On pull request, set `--dry-run` to check whether they can be published
         if: github.event_name == 'pull_request'
-        run: |
-          ./tools/github_workflows/publish_sctrace.sh --dry-run
+        run: nix run .#publish-sctrace --no-write-lock-file -- --dry-run
 
       - name: Publish sctrace
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
           REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          ./tools/github_workflows/publish_sctrace.sh --token ${REGISTRY_TOKEN}
+        run: nix run .#publish-sctrace --no-write-lock-file -- --token ${REGISTRY_TOKEN}

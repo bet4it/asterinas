@@ -19,10 +19,8 @@ jobs:
   validate_scmls:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    container: asterinas/asterinas:0.18.0-20260702
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Validate SCML files with sctrace
-        run: |
-          export ASTER_SCML=$(find ./book/src/kernel/linux-compatibility/ -name "*.scml")
-          ./tools/sctrace.sh $ASTER_SCML -- echo "Asterinas"
+        run: nix run .#validate-scml --no-write-lock-file

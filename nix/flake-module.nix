@@ -88,6 +88,7 @@
         pkg-config
         qemu
         rustToolchain
+        strace
         typos
         util-linux
         which
@@ -752,6 +753,27 @@
                   RUSTDOCFLAGS="-Dwarnings" cargo osdk doc
                 )
               done
+            '';
+
+          "publish-api-docs" = mkApp "asterinas-publish-api-docs"
+            "Build and publish API documentation." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/github_workflows/publish_api_docs.sh "$@"
+            '';
+
+          "publish-sctrace" = mkApp "asterinas-publish-sctrace"
+            "Run the sctrace crates.io publish workflow." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/github_workflows/publish_sctrace.sh "$@"
+            '';
+
+          "publish-osdk-and-ostd" = mkApp "asterinas-publish-osdk-and-ostd"
+            "Run the OSDK and OSTD crates.io publish workflow." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              ./tools/github_workflows/publish_osdk_and_ostd.sh "$@"
             '';
 
           cachix = mkApp "asterinas-cachix"
