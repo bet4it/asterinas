@@ -27,9 +27,9 @@ name: "Invoke the aster-code-review skill"
 #            TRUSTED copy of the parser (the one checked out at the default-branch
 #            SHA that triggered the workflow — never the PR's copy), and hands the
 #            `run` job only a validated plan.
-#   run    — the heavy lifting, inside the Asterinas dev image; only starts when
-#            triage says `proceed=true`. It checks out the PR head and runs the
-#            PR's own skill against it.
+#   run    — the heavy lifting, inside the Nix development environment; only
+#            starts when triage says `proceed=true`. It checks out the PR head
+#            and runs the PR's own skill against it.
 #
 # SECURITY. The comment body is read via an env var, never interpolated into a
 # shell with ${{ }} (that would be an Actions injection). `triage` runs the trusted
@@ -217,7 +217,7 @@ jobs:
           reply msg.md
           echo "proceed=true" >> "$GITHUB_OUTPUT"
 
-  # --- run: the actual review / self-test, inside the dev image ---------------
+  # --- run: the actual review / self-test, inside the Nix dev env -------------
   run:
     needs: triage
     if: needs.triage.outputs.proceed == 'true'
@@ -231,39 +231,25 @@ jobs:
       group: aster-code-review-run-pr-${{ github.event.issue.number || inputs.pr_number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    # Run inside the Asterinas dev image, which ships Codex (and Claude) preinstalled
-    # on PATH (/root/.local/bin) plus python3 + yq — everything the skill and its
-    # benchmark need. This is why there is no Codex-install step. The one tool the
-    # image lacks is the GitHub CLI, installed below.
-    container:
-      image: asterinas/asterinas:0.18.0-20260701
     timeout-minutes: 60          # headroom for a full `benchmark`; review/smoke finish far sooner
     permissions:
       contents: read
       pull-requests: write
     steps:
-      # TODO: Pre-install Github CLI inside the Asterinas development Docker image.
-      - name: Install GitHub CLI
-        # The dev image has no `gh`; fetch the latest release binary (curl + tar are present).
-        run: |
-          set -eux
-          tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest | sed 's#.*/tag/v##')
-          curl -fsSL "https://github.com/cli/cli/releases/download/v${tag}/gh_${tag}_linux_amd64.tar.gz" | tar -xz -C /tmp
-          install -m 0755 "/tmp/gh_${tag}_linux_amd64/bin/gh" /usr/local/bin/gh
-          gh --version
-
       - uses: actions/checkout@v4
         with:
           repository: ${{ needs.triage.outputs.head_repo }}
           ref: ${{ needs.triage.outputs.head_sha }}
           fetch-depth: 0
+      - uses: ./.github/actions/setup-nix
 
-      - name: Trust the checked-out workspace (container git)
-        # In a container job the checkout is owned by a different UID than the
-        # container user, so raw `git` in later run-steps aborts with "dubious
-        # ownership". Mark repos safe once; it persists (via $HOME) to every later
-        # step, including the scratch worktrees the benchmark creates under /tmp.
-        run: git config --global --add safe.directory '*'
+      - name: Verify review bot tools
+        run: |
+          nix develop --no-write-lock-file -c bash -c '
+            codex --version
+            gh --version
+            python3 -c "import yaml"
+          '
 
       # For fork PRs the base branch tip may not be in the fork's history; fetch
       # it so `diff <base>` (and the benchmark) can find merge-bases.
@@ -272,20 +258,6 @@ jobs:
         run: |
           git remote add base-repo "${{ github.server_url }}/${{ github.repository }}.git"
           git fetch base-repo "${{ needs.triage.outputs.base_ref }}"
-
-      # The benchmark's schema check and grader read problems.yaml with PyYAML, but
-      # the dev image's system python3 may lack it (yq ships its own isolated venv).
-      # Bootstrap it once, before any self-test runs.
-      - name: Ensure PyYAML (self-test only)
-        if: needs.triage.outputs.kind == 'test'
-        run: |
-          set -e
-          if python3 -c 'import yaml' 2>/dev/null; then echo "PyYAML already present"; exit 0; fi
-          echo "Installing PyYAML…"
-          if command -v pip3 >/dev/null 2>&1 && pip3 install --break-system-packages pyyaml; then :
-          elif apt-get update && apt-get install -y python3-yaml; then :
-          else echo "could not install PyYAML" >&2; exit 1; fi
-          python3 -c 'import yaml' && echo "PyYAML ready"
 
       # --- review modes: run the skill, post inline comments ------------------
       # FIXME(security): this step runs the PR's OWN aster_code_review.sh (and the
@@ -301,6 +273,7 @@ jobs:
           PATHS: ${{ needs.triage.outputs.paths }}
           BASE_SHA: ${{ needs.triage.outputs.base_sha }}
         run: |
+          nix develop --no-write-lock-file -c bash -s <<'EOF'
           set -euo pipefail
           if [ "$MODE" = files ]; then
             # Re-validate each path (trusted): safe charset, no traversal, tracked in the checkout.
@@ -314,6 +287,7 @@ jobs:
           else
             "$SKILL_DIR/aster_code_review.sh" diff "$BASE_SHA" review.md --per-persona-context=no
           fi
+          EOF
 
       - name: Post review comments
         if: needs.triage.outputs.kind == 'review'
@@ -323,14 +297,16 @@ jobs:
           PR_NUMBER: ${{ needs.triage.outputs.pr_number }}
           HEAD_SHA: ${{ needs.triage.outputs.head_sha }}
         run: |
+          nix develop --no-write-lock-file -c bash -s <<'EOF'
           if [ ! -s review.md ]; then
             echo "No review produced; nothing to post."; exit 0
           fi
           "$SKILL_DIR/scripts/post_reviews_to_github.sh" \
             --repo "$REPO" --pr "$PR_NUMBER" --head-sha "$HEAD_SHA" \
             --finalize --event comment review.md
+          EOF
 
-      # --- test modes: run make, then post a human-friendly status comment ----
+      # --- test modes: run the skill task, then post a status comment ---------
       - name: Run skill self-test
         if: needs.triage.outputs.kind == 'test'
         id: selftest
@@ -344,15 +320,16 @@ jobs:
           if [ -n "$PROBLEMS" ] && ! printf '%s' "$PROBLEMS" | grep -qE '^[0-9]{1,4}( [0-9]{1,4})*$'; then
             echo "invalid PROBLEMS: $PROBLEMS" >&2; exit 1
           fi
-          cd "$SKILL_DIR"
-          # Don't let a non-zero make abort the step (default shell is `bash -eo pipefail`);
+          # Don't let a non-zero test abort the step (default shell is `bash -eo pipefail`);
           # capture the code so the report step always runs and the verdict is posted.
           set +e
           if [ "$TARGET" = smoke ]; then
-            make smoke ACR_AGENT_PROFILE=codex_workflow PROBLEMS="$PROBLEMS" 2>&1 | tee "$GITHUB_WORKSPACE/run.log"
+            ACR_AGENT_PROFILE=codex_workflow PROBLEMS="$PROBLEMS" \
+              nix develop --no-write-lock-file -c "$SKILL_DIR/run_task.sh" smoke 2>&1 | tee "$GITHUB_WORKSPACE/run.log"
           else
             # informational: report recall, don't fail the check on <100% (codex_workflow != reference config)
-            make benchmark ACR_AGENT_PROFILE=codex_workflow MIN_RECALL=1 PROBLEMS="$PROBLEMS" 2>&1 | tee "$GITHUB_WORKSPACE/run.log"
+            ACR_AGENT_PROFILE=codex_workflow MIN_RECALL=1 PROBLEMS="$PROBLEMS" \
+              nix develop --no-write-lock-file -c "$SKILL_DIR/run_task.sh" benchmark 2>&1 | tee "$GITHUB_WORKSPACE/run.log"
           fi
           rc=${PIPESTATUS[0]}
           set -e
@@ -368,12 +345,13 @@ jobs:
           PROBLEMS: ${{ needs.triage.outputs.problems }}
           RC: ${{ steps.selftest.outputs.rc }}
         run: |
+          nix develop --no-write-lock-file -c bash -s <<'EOF'
           log="$GITHUB_WORKSPACE/run.log"
           summary="$(grep -E '^(smoke:|recall:)' "$log" 2>/dev/null | tail -1 || true)"
           [ -n "$summary" ] || summary="(no summary line — see the run log below)"
           if [ "${RC:-1}" = 0 ]; then icon='✅'; verdict='passed'; else icon='❌'; verdict='failed'; fi
           # Echo the command back in the CLI style the user typed (--problems=…),
-          # not the internal make knob (PROBLEMS=…).
+          # not the internal environment variable (PROBLEMS=…).
           probs=""; [ -n "$PROBLEMS" ] && probs=" --problems=\"$PROBLEMS\""
           {
             echo "$icon \`aster-code-review $TARGET$probs\`  $verdict — ran the PR's skill + coding guidelines."
@@ -384,3 +362,4 @@ jobs:
           } > report.md
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file report.md
           exit "${RC:-1}"
+          EOF

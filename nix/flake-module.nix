@@ -53,7 +53,45 @@
         env.OSDK_LOCAL_DEV = "1";
       };
 
-      hostTools = with pkgs; [
+      codexPlatform = {
+        x86_64-linux = {
+          package = "linux-x64";
+          targetTriple = "x86_64-unknown-linux-musl";
+          hash = "sha256-MpIQl3NCl+jFh51RdkdnHy+8XupzjJml2r6uxXfOqm0=";
+        };
+        aarch64-linux = {
+          package = "linux-arm64";
+          targetTriple = "aarch64-unknown-linux-musl";
+          hash = "sha256-vYuNf3D71YGEjn0VlgdS96vzf/vPdsl1flwjGjNkm8g=";
+        };
+      }.${system} or null;
+
+      codexCli =
+        if codexPlatform == null then
+          null
+        else
+          pkgs.stdenvNoCC.mkDerivation {
+            pname = "codex-cli";
+            version = "0.142.3";
+
+            src = pkgs.fetchurl {
+              url =
+                "https://registry.npmjs.org/@openai/codex/-/codex-0.142.3-${codexPlatform.package}.tgz";
+              inherit (codexPlatform) hash;
+            };
+
+            sourceRoot = "package";
+
+            installPhase = ''
+              runHook preInstall
+              mkdir -p "$out/lib/codex" "$out/bin"
+              cp -R vendor "$out/lib/codex/"
+              ln -s "$out/lib/codex/vendor/${codexPlatform.targetTriple}/bin/codex" "$out/bin/codex"
+              runHook postInstall
+            '';
+          };
+
+      hostTools = (with pkgs; [
         bash
         cargoOsdk
         cachix
@@ -68,6 +106,7 @@
         findutils
         gawk
         gdb
+        gh
         git
         gnumake
         gnused
@@ -87,6 +126,7 @@
         parted
         patch
         pkg-config
+        (python3.withPackages (pythonPackages: [ pythonPackages.pyyaml ]))
         qemu
         rustToolchain
         strace
@@ -97,7 +137,7 @@
         xz
         yq-go
         zstd
-      ];
+      ]) ++ lib.optionals (codexCli != null) [ codexCli ];
 
       initramfsPackagesFor = target:
         import ../test/initramfs/nix {

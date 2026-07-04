@@ -22,14 +22,11 @@ model_provider = "openai_apikey"
 
 # SANDBOX.
 # Unlike the `codex` profile (workspace-write, for a dev machine),
-# the CI job runs inside an ephemeral GitHub Actions container
-# that is ALREADY the isolation boundary
-# — and codex's own `workspace-write` sandbox cannot run there:
-# it shells out via bubblewrap,
-# which needs unprivileged user namespaces that the container disables
-# ("bwrap: ... kernel does not allow non-privileged user namespaces"),
-# so every command codex runs is rejected.
-# We therefore disable codex's in-container sandbox and let the container confine it.
+# the CI job runs on an ephemeral GitHub-hosted runner VM that is already
+# discarded after the workflow. Codex's own `workspace-write` sandbox shells
+# out via bubblewrap, which depends on host-specific user namespace setup and
+# is not consistently available in CI environments.
+# We therefore disable codex's sandbox and rely on the ephemeral runner boundary.
 # `approval_policy` stays `never` (no human in CI).
 # Network is fully available (needed for the API and for docs/spec lookups during verification).
 sandbox_mode = "danger-full-access"

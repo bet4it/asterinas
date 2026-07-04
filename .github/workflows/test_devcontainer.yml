@@ -27,7 +27,7 @@ jobs:
       - uses: ./.github/actions/setup-nix
       - name: Verify Nix development shell
         run: |
-          nix develop --no-write-lock-file -c bash -lc '
+          nix develop --no-write-lock-file -c bash -c '
             rustc --version
             cargo --version
             cargo osdk --version
