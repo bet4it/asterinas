@@ -5,13 +5,13 @@ on:
   pull_request:
     paths:
       - book/**
-      - .github/workflows/update-website.yml
+      - .github/workflows/publish_website.yml
   push:
     branches:
       - main
     paths:
       - book/**
-      - .github/workflows/update-website.yml
+      - .github/workflows/publish_website.yml
 
 jobs:
   build_and_deploy:
@@ -19,18 +19,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: 'asterinas/asterinas'
-          path: 'asterinas'
-      - uses: ./asterinas/.github/actions/setup-nix
+      - uses: ./.github/actions/setup-nix
       
       - name: Build the website
         run: |
-          cd asterinas/book
+          cd book
           nix run ..#book --no-write-lock-file
 
       - name: Deploy website
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.repository == 'asterinas/asterinas' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           BOOK_PUBLISH_KEY: ${{ secrets.BOOK_PUBLISH_KEY }}
         run: |
@@ -45,7 +42,7 @@ jobs:
           cd temp_book
           git checkout --orphan newBranch
           git rm -rf *
-          cp -r ../asterinas/book/book/* ./
+          cp -r ../book/book/* ./
           git add -A
           git commit -am "Update website"
           git branch -D main

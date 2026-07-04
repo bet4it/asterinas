@@ -34,7 +34,7 @@ jobs:
         run: nix run .#cachix --no-write-lock-file
 
       - name: Build Asterinas NixOS patched packages and push to development cache
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.repository == 'asterinas/asterinas' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: |
           export CACHIX_AUTH_TOKEN=${{ secrets.CACHIX_AUTH_TOKEN_FOR_DEV_CACHE }}
           nix run .#push-cachix --no-write-lock-file 2>&1 | tee cachix.log || true

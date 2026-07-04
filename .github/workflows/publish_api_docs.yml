@@ -33,7 +33,7 @@ jobs:
         run: nix run .#docs --no-write-lock-file
 
       - name: Build & Upload Nightly API Docs
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: github.repository == 'asterinas/asterinas' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         env:
           API_DOCS_NIGHTLY_PUBLISH_KEY: ${{ secrets.API_DOCS_NIGHTLY_PUBLISH_KEY }}
         run: |
@@ -42,7 +42,7 @@ jobs:
           nix run .#publish-api-docs --no-write-lock-file -- nightly ${KEY_FILE}
 
       - name: Build & Upload Release API Docs
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: github.repository == 'asterinas/asterinas' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           API_DOCS_PUBLISH_KEY: ${{ secrets.API_DOCS_PUBLISH_KEY }}
         run: |
