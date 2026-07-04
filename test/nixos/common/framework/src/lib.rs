@@ -217,7 +217,7 @@ pub fn __nixos_test_main() -> Result<(), Box<dyn std::error::Error>> {
     let init_prompt = "root@asterinas:";
     session.exp_string(init_prompt).map_err(Error::from)?;
 
-    let desc = SessionDesc::new(init_prompt, "", "poweroff");
+    let desc = SessionDesc::new(init_prompt, "", "poweroff -f");
     let mut session = Session::new(desc, session);
 
     let mut passed = 0;
