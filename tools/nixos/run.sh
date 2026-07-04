@@ -72,7 +72,11 @@ case "$MODE" in
 esac
 
 if [ "${ENABLE_KVM}" = "1" ]; then
-    QEMU_ARGS="${QEMU_ARGS} -accel kvm"
+    if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+        QEMU_ARGS="${QEMU_ARGS} -accel kvm"
+    else
+        echo "Warning: /dev/kvm is not readable and writable; falling back to QEMU TCG." >&2
+    fi
 fi
 
 QEMU_BIN=${QEMU_BIN:-qemu-system-${TARGET_ARCH}}

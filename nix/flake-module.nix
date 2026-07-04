@@ -366,6 +366,41 @@
         }
       '';
 
+      buildNixosIso = ''
+        export CONSOLE="''${CONSOLE:-ttyS0}"
+        cd "$ASTERINAS_DIR/kernel"
+        cargo osdk build \
+          --release \
+          --boot-method="grub-rescue-iso" \
+          --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
+          --grub-boot-protocol="linux" \
+          --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
+          --kcmd-args="console=''${CONSOLE:-hvc0}" \
+          --initramfs="$OSDK_INITRAMFS_PATH"
+        OSDK_KERNEL_PATH="$CARGO_TARGET_DIR/osdk/iso_root/boot/aster-kernel-osdk-bin"
+        if [ ! -e "$OSDK_KERNEL_PATH" ]; then
+          echo "Error: cargo-osdk did not produce $OSDK_KERNEL_PATH." >&2
+          exit 1
+        fi
+        cd "$ASTERINAS_DIR"
+        ${prepareNixosConfig}
+        prepare_nixos_config
+        NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
+        mkdir -p "$NIXOS_DIR"
+        nix-build distro/iso_image \
+          --argstr target_platform "$NIX_SYSTEM" \
+          --arg autoInstall "''${AUTO_INSTALL:-true}" \
+          --argstr config-file-name "''${CONFIG_FILE_NAME:-configuration.nix}" \
+          --argstr config-path "$NIXOS_CONFIG_PATH" \
+          --arg aster-kernel-path "$OSDK_KERNEL_PATH" \
+          --argstr console "''${CONSOLE:-ttyS0}" \
+          --argstr installerConsole "''${NIXOS_INSTALLER_CONSOLE:-hvc0}" \
+          --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
+          --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
+          --argstr version "$(cat VERSION)" \
+          --out-link "$NIXOS_DIR/iso_image"
+      '';
+
       ensureInitramfs = ''
         BUILD_DIR="$INITRAMFS_BUILD_DIR"
         TARGET="''${TARGET_ARCH:-x86_64}"
@@ -502,35 +537,16 @@
             mkApp "asterinas-iso" "Build the Asterinas NixOS installer ISO." ''
               ${appPrelude}
               ${ensureInitramfs}
-              cd "$ASTERINAS_DIR/kernel"
-              cargo osdk build \
-                --release \
-                --boot-method="grub-rescue-iso" \
-                --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue" \
-                --grub-boot-protocol="linux" \
-                --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
-                --kcmd-args="console=''${CONSOLE:-hvc0}" \
-                --initramfs="$OSDK_INITRAMFS_PATH"
-              cd "$ASTERINAS_DIR"
-              ${prepareNixosConfig}
-              prepare_nixos_config
-              NIX_SYSTEM="$(target_nix_system "''${TARGET_ARCH:-x86_64}")"
-              mkdir -p "$NIXOS_DIR"
-              nix-build distro/iso_image \
-                --argstr target_platform "$NIX_SYSTEM" \
-                --arg autoInstall "''${AUTO_INSTALL:-true}" \
-                --argstr config-file-name "''${CONFIG_FILE_NAME:-configuration.nix}" \
-                --argstr config-path "$NIXOS_CONFIG_PATH" \
-                --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
-                --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
-                --argstr version "$(cat VERSION)" \
-                --out-link "$NIXOS_DIR/iso_image"
+              ${buildNixosIso}
             '';
 
           "run-iso" = mkApp "asterinas-run-iso"
             "Run the Asterinas NixOS installer ISO in QEMU." ''
               ${appPrelude}
-              export OVMF="''${OVMF:-on}"
+              export NIXOS_INSTALLER_CONSOLE="''${NIXOS_INSTALLER_CONSOLE:-ttyS0}"
+              ${ensureInitramfs}
+              ${buildNixosIso}
+              export OVMF="''${OVMF:-off}"
               export ENABLE_KVM="''${ENABLE_KVM:-1}"
               cd "$ASTERINAS_DIR"
               ./tools/nixos/run.sh iso
@@ -539,6 +555,7 @@
           "install-nixos" = mkApp "asterinas-install-nixos"
             "Install Asterinas NixOS into a local disk image." ''
               ${appPrelude}
+              export CONSOLE="''${CONSOLE:-ttyS0}"
               ${ensureInitramfs}
               cd "$ASTERINAS_DIR/kernel"
               cargo osdk build \
@@ -549,6 +566,11 @@
                 --kcmd-args="ostd.log_level=''${LOG_LEVEL:-error}" \
                 --kcmd-args="console=''${CONSOLE:-hvc0}" \
                 --initramfs="$OSDK_INITRAMFS_PATH"
+              OSDK_KERNEL_PATH="$CARGO_TARGET_DIR/osdk/iso_root/boot/aster-kernel-osdk-bin"
+              if [ ! -e "$OSDK_KERNEL_PATH" ]; then
+                echo "Error: cargo-osdk did not produce $OSDK_KERNEL_PATH." >&2
+                exit 1
+              fi
               cd "$ASTERINAS_DIR"
               ${prepareNixosConfig}
               prepare_nixos_config
@@ -561,6 +583,7 @@
                 --argstr log-level "''${LOG_LEVEL:-error}" \
                 --argstr console "''${CONSOLE:-hvc0}" \
                 --argstr config-path "$NIXOS_CONFIG_PATH" \
+                --arg aster-kernel-path "$OSDK_KERNEL_PATH" \
                 --argstr extra-substituters "''${RELEASE_SUBSTITUTER:-} ''${DEV_SUBSTITUTER:-}" \
                 --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
                 --out-link "$NIXOS_DIR/aster-nixos-installer"
@@ -577,6 +600,7 @@
           "run-nixos" = mkApp "asterinas-run-nixos"
             "Run an Asterinas NixOS disk image in QEMU." ''
               ${appPrelude}
+              export CONSOLE="''${CONSOLE:-ttyS0}"
               export OVMF="''${OVMF:-on}"
               export ENABLE_KVM="''${ENABLE_KVM:-1}"
               cd "$ASTERINAS_DIR"

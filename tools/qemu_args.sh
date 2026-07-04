@@ -39,20 +39,34 @@ fi
 VIRTIOFS_TAG=${VIRTIOFS_TAG:-"aster-virtiofs"}
 VIRTIOFS_SOCKET=${VIRTIOFS_SOCKET:-"/tmp/vhostqemu/vfs.sock"}
 
-SSH_RAND_PORT=${SSH_PORT:-$(shuf -i 1024-65535 -n 1)}
-NGINX_RAND_PORT=${NGINX_PORT:-$(shuf -i 1024-65535 -n 1)}
-REDIS_RAND_PORT=${REDIS_PORT:-$(shuf -i 1024-65535 -n 1)}
-IPERF_RAND_PORT=${IPERF_PORT:-$(shuf -i 1024-65535 -n 1)}
-LMBENCH_TCP_LAT_RAND_PORT=${LMBENCH_TCP_LAT_PORT:-$(shuf -i 1024-65535 -n 1)}
-LMBENCH_TCP_BW_RAND_PORT=${LMBENCH_TCP_BW_PORT:-$(shuf -i 1024-65535 -n 1)}
-MEMCACHED_RAND_PORT=${MEMCACHED_PORT:-$(shuf -i 1024-65535 -n 1)}
+pick_unused_port() {
+    local port
+    for _ in $(seq 1 100); do
+        port=$(shuf -i 1024-65535 -n 1)
+        if ! (echo > /dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+            echo "$port"
+            return 0
+        fi
+    done
+
+    echo "Failed to find an unused localhost TCP port" >&2
+    return 1
+}
+
+SSH_RAND_PORT=${SSH_PORT:-$(pick_unused_port)}
+NGINX_RAND_PORT=${NGINX_PORT:-$(pick_unused_port)}
+REDIS_RAND_PORT=${REDIS_PORT:-$(pick_unused_port)}
+IPERF_RAND_PORT=${IPERF_PORT:-$(pick_unused_port)}
+LMBENCH_TCP_LAT_RAND_PORT=${LMBENCH_TCP_LAT_PORT:-$(pick_unused_port)}
+LMBENCH_TCP_BW_RAND_PORT=${LMBENCH_TCP_BW_PORT:-$(pick_unused_port)}
+MEMCACHED_RAND_PORT=${MEMCACHED_PORT:-$(pick_unused_port)}
 
 # Optional QEMU arguments. Opt in them manually if needed.
 # QEMU_OPT_ARG_DUMP_PACKETS="-object filter-dump,id=filter0,netdev=net01,file=virtio-net.pcap"
 
 if [ "$NETDEV" = "user" ]; then
     echo "[$1] Forwarded QEMU guest port: $SSH_RAND_PORT->22; $NGINX_RAND_PORT->8080 $REDIS_RAND_PORT->6379 $IPERF_RAND_PORT->5201 $LMBENCH_TCP_LAT_RAND_PORT->31234 $LMBENCH_TCP_BW_RAND_PORT->31236 $MEMCACHED_RAND_PORT->11211" 1>&2
-    NETDEV_ARGS="-netdev user,id=net01,hostfwd=tcp::$SSH_RAND_PORT-:22,hostfwd=tcp::$NGINX_RAND_PORT-:8080,hostfwd=tcp::$REDIS_RAND_PORT-:6379,hostfwd=tcp::$IPERF_RAND_PORT-:5201,hostfwd=tcp::$LMBENCH_TCP_LAT_RAND_PORT-:31234,hostfwd=tcp::$LMBENCH_TCP_BW_RAND_PORT-:31236,hostfwd=tcp::$MEMCACHED_RAND_PORT-:11211"
+    NETDEV_ARGS="-netdev user,id=net01,hostfwd=tcp:127.0.0.1:$SSH_RAND_PORT-:22,hostfwd=tcp:127.0.0.1:$NGINX_RAND_PORT-:8080,hostfwd=tcp:127.0.0.1:$REDIS_RAND_PORT-:6379,hostfwd=tcp:127.0.0.1:$IPERF_RAND_PORT-:5201,hostfwd=tcp:127.0.0.1:$LMBENCH_TCP_LAT_RAND_PORT-:31234,hostfwd=tcp:127.0.0.1:$LMBENCH_TCP_BW_RAND_PORT-:31236,hostfwd=tcp:127.0.0.1:$MEMCACHED_RAND_PORT-:11211"
     VIRTIO_NET_FEATURES=",mrg_rxbuf=off,ctrl_rx=off,ctrl_rx_extra=off,ctrl_vlan=off,ctrl_vq=off,ctrl_guest_offloads=off,ctrl_mac_addr=off,event_idx=off,queue_reset=off,guest_announce=off,indirect_desc=off"
 elif [ "$NETDEV" = "tap" ]; then
     THIS_SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )

@@ -60,11 +60,19 @@ let
       }
     ];
   };
+  kernelParams = "PATH=/bin:/nix/var/nix/profiles/system/sw/bin ostd.log_level=${config.aster_nixos.log-level} console=${config.aster_nixos.console} -- sh /init root=/dev/vda2 init=/nix/var/nix/profiles/system/stage-2-init rd.break=${
+      if config.aster_nixos.break-into-stage-1-shell then "1" else "0"
+    }";
 in {
   boot.loader.grub.enable = true;
   boot.loader.grub.efiSupport = true;
   boot.loader.grub.device = "nodev";
   boot.loader.grub.efiInstallAsRemovable = true;
+  boot.loader.grub.extraConfig = lib.mkIf (config.aster_nixos.console == "ttyS0") ''
+    serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1
+    terminal_input serial console
+    terminal_output serial console
+  '';
   boot.initrd.enable = false;
   boot.kernel.enable = false;
   # Hook function will be called in stage-2-init and before running systemd.
@@ -78,9 +86,7 @@ in {
   # TODO: Fix errors and warnings from systemd and remove this setting.
   environment.sessionVariables = { SYSTEMD_LOG_LEVEL = "crit"; };
   system.systemBuilderCommands = ''
-    echo "PATH=/bin:/nix/var/nix/profiles/system/sw/bin ostd.log_level=${config.aster_nixos.log-level} console=${config.aster_nixos.console} -- sh /init root=/dev/vda2 init=/nix/var/nix/profiles/system/stage-2-init rd.break=${
-      if config.aster_nixos.break-into-stage-1-shell then "1" else "0"
-    }"  > $out/kernel-params
+    echo "${kernelParams}" > $out/kernel-params
     mv $out/init $out/stage-2-init
     sed -i 's_^\([[:space:]]*\)\(exec > >(tee -i /run/log/stage-2-init.log) 2>&1\)$_\1# \2_' $out/stage-2-init
     if [ "${config.aster_nixos.disable-systemd}" = "true" ]; then
