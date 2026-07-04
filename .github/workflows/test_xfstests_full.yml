@@ -9,12 +9,10 @@ on:
 jobs:
   xfstests-full:
     runs-on: ubuntu-4-cores-150GB-ssd
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: --device=/dev/kvm --privileged
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run xfstests full.list
         uses: ./.github/actions/test
         with:

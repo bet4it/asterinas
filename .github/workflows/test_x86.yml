@@ -78,16 +78,6 @@ jobs:
 
   conformance-test:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
     strategy:
       fail-fast: false
       matrix:
@@ -107,8 +97,9 @@ jobs:
     steps:
       - name: Free disk space
         # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+        run: sudo rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run conformance test (${{ matrix.variant }}, ${{ matrix.suite }})
         uses: ./.github/actions/test
         with:
@@ -145,18 +136,12 @@ jobs:
           
   xfstests:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
-      volumes:
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
     timeout-minutes: 30
     steps:
       - name: Free disk space
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+        run: sudo rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run xfstests
         uses: ./.github/actions/test
         with:

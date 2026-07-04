@@ -9,6 +9,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
 
       - name: Run Vsock Server on Host
         id: host_vsock_server
@@ -16,15 +17,14 @@ jobs:
             sudo modprobe vhost_vsock
             sudo apt-get install socat
             echo "Run vsock server on host...."
+            server_cmd="while read cmd; do result=\$(eval \"\$cmd\" 2>&1); echo \"\$result\"; done"
             socat -ddd VSOCK-LISTEN:1234,fork \
-              SYSTEM:'while read cmd; do result=$(eval "$cmd" 2>&1); echo "$result"; done' &
+              SYSTEM:"$server_cmd" &
       - name: Run Vsock Client and Server on Guest
         id: guest_vsock_client_server
         run: |
-            docker run \
-              --privileged --network=host -v /dev:/dev \
-              -v ./:/root/asterinas asterinas/asterinas:0.18.0-20260702 \
-              bash -lc 'AUTO_TEST=vsock ENABLE_KVM=0 SCHEME=microvm RELEASE=1 nix run .#run-kernel --no-write-lock-file' &
+            AUTO_TEST=vsock ENABLE_KVM=0 SCHEME=microvm RELEASE=1 \
+              nix run .#run-kernel --no-write-lock-file &
       - name: Run Vsock Client on Host
         id: host_vsock_client
         run: |
