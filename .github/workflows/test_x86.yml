@@ -107,7 +107,7 @@ jobs:
           release: ${{ matrix.release != false }}
           enable_kvm: ${{ matrix.enable_kvm != false }}
           smp: ${{ matrix.smp }}
-          netdev: 'tap'
+          netdev: 'user'
           scheme: ${{ matrix.scheme }}
           extra_blocklists: ${{ matrix.extra_blocklists }}
           conformance_test_suite: ${{ matrix.suite }}
