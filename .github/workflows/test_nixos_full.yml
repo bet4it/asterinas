@@ -75,9 +75,12 @@ jobs:
                   = '0000000000000000000000000000000000000000' ]; then
                 git diff-tree --no-commit-id --name-only \
                   -r '${{ github.sha }}' > /tmp/changed
-              else
+              elif git cat-file -e '${{ github.event.before }}^{commit}'; then
                 git diff --name-only \
                   '${{ github.event.before }}' '${{ github.sha }}' > /tmp/changed
+              else
+                git diff-tree --no-commit-id --name-only \
+                  -r '${{ github.sha }}' > /tmp/changed
               fi
               ;;
           esac
