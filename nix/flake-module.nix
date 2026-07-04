@@ -94,6 +94,7 @@
         which
         xorriso
         xz
+        yq-go
         zstd
       ];
 

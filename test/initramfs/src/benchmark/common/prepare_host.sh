@@ -15,6 +15,7 @@ LINUX_DEPENDENCIES_DIR="/opt/linux_binary_cache"
 LINUX_KERNEL="${LINUX_DEPENDENCIES_DIR}/vmlinuz"
 LINUX_KERNEL_VERSION="6.16.0"
 LINUX_MODULES_DIR="${BENCHMARK_ROOT}/../build/initramfs/lib/modules/${LINUX_KERNEL_VERSION}/kernel"
+INITRAMFS_BUILD_DIR="${INITRAMFS_BUILD_DIR:-${BENCHMARK_ROOT}/../../build}"
 WGET_SCRIPT="${BENCHMARK_ROOT}/../../../tools/atomic_wget.sh"
 
 # Prepare Linux kernel and modules
@@ -41,6 +42,9 @@ prepare_libs() {
 # Prepare fs for Linux
 prepare_fs() {
     # Disable unsupported ext2 features of Asterinas on Linux to ensure fairness
-    mke2fs -F -O ^ext_attr -O ^resize_inode -O ^dir_index ${BENCHMARK_ROOT}/../../build/ext2.img
-    make initramfs BENCHMARK=${benchmark}
+    mke2fs -F -O ^ext_attr -O ^resize_inode -O ^dir_index "${INITRAMFS_BUILD_DIR}/ext2.img"
+    if [ ! -e "${INITRAMFS_BUILD_DIR}/initramfs.cpio.gz" ]; then
+        env BENCHMARK="${benchmark}" INITRAMFS_BUILD_DIR="${INITRAMFS_BUILD_DIR}" \
+            nix run .#kernel --no-write-lock-file
+    fi
 }

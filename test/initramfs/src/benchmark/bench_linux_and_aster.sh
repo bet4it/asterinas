@@ -118,10 +118,10 @@ run_benchmark() {
      done <<< "$runtime_configs_str"
 
     # Prepare commands for Asterinas and Linux using arrays
-    local asterinas_cmd_arr=(make run_kernel "BENCHMARK=${benchmark}")
-    # Add scheme part only if it's not empty and the platform is not TDX (OSDK doesn't support multiple SCHEME)
-    [[ -n "$aster_scheme_cmd_part" && "$platform" != "tdx" ]] && asterinas_cmd_arr+=("$aster_scheme_cmd_part")
-    asterinas_cmd_arr+=(
+    local asterinas_cmd_arr=(
+        env
+        "BENCHMARK=${benchmark}"
+        "INITRAMFS_BUILD_DIR=${INITRAMFS_BUILD_DIR}"
         "SMP=${smp_val}"
         "MEM=${mem_val}"
         ENABLE_KVM=1
@@ -129,9 +129,17 @@ run_benchmark() {
         NETDEV=tap
         VHOST=on
     )
+    # Add scheme part only if it's not empty and the platform is not TDX (OSDK doesn't support multiple SCHEME)
+    [[ -n "$aster_scheme_cmd_part" && "$platform" != "tdx" ]] && asterinas_cmd_arr+=("$aster_scheme_cmd_part")
     if [[ "$platform" == "tdx" ]]; then
         asterinas_cmd_arr+=(INTEL_TDX=1)
     fi
+    asterinas_cmd_arr+=(
+        nix
+        run
+        .#run-kernel
+        --no-write-lock-file
+    )
 
     local linux_cmd_arr=(
         qemu-system-x86_64
@@ -141,8 +149,8 @@ run_benchmark() {
         -machine q35,kernel-irqchip=split
         --enable-kvm
         -kernel "${LINUX_KERNEL}"
-        -initrd "${BENCHMARK_ROOT}/../../build/initramfs.cpio.gz"
-        -drive "if=none,format=raw,id=x0,file=${BENCHMARK_ROOT}/../../build/ext2.img"
+        -initrd "${INITRAMFS_BUILD_DIR}/initramfs.cpio.gz"
+        -drive "if=none,format=raw,id=x0,file=${INITRAMFS_BUILD_DIR}/ext2.img"
         -device "virtio-blk-pci,bus=pcie.0,addr=0x6,drive=x0,serial=vext2,disable-legacy=on,disable-modern=off,queue-size=64,num-queues=1,request-merging=off,backend_defaults=off,discard=off,write-zeroes=off,event_idx=off,indirect_desc=off,queue_reset=off"
         -device "virtio-net-pci,netdev=net01,disable-legacy=on,disable-modern=off,csum=off,guest_csum=off,ctrl_guest_offloads=off,guest_tso4=off,guest_tso6=off,guest_ecn=off,guest_ufo=off,host_tso4=off,host_tso6=off,host_ecn=off,mrg_rxbuf=off,ctrl_vq=off,ctrl_rx=off,ctrl_vlan=off,ctrl_rx_extra=off,guest_announce=off,ctrl_mac_addr=off,host_ufo=off,guest_uso4=off,guest_uso6=off,host_uso=off"
         -append "console=ttyS0 rdinit=/benchmark/common/bench_runner.sh ${benchmark} linux mitigations=off hugepages=0 transparent_hugepage=never quiet"

@@ -106,12 +106,10 @@ jobs:
       # FIXME: Remove the following line after fixing the parallel execution of network benchmarks.
       max-parallel: 1
     timeout-minutes: 60
-    container: 
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run benchmarks
         uses: ./.github/actions/benchmark
         with:
