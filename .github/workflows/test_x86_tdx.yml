@@ -9,15 +9,9 @@ on:
 jobs:
   osdk-test:
     runs-on: self-hosted
-    strategy:
-      matrix:
-        image: ['asterinas/asterinas:0.18.0-20260702', 'asterinas/osdk:0.18.0-20260702']
-      fail-fast: false
-    container:
-      image: ${{ matrix.image }}
-      options: -v /dev:/dev --privileged
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run TDX OSDK tests
         uses: ./.github/actions/test
         with:
@@ -26,9 +20,6 @@ jobs:
 
   boot-test:
     runs-on: self-hosted
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +28,7 @@ jobs:
           - { variant: 'handover64-tap-smp4', netdev: 'tap', smp: 4 }
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run TDX boot test (${{ matrix.variant }})
         uses: ./.github/actions/test
         with:
@@ -49,9 +41,6 @@ jobs:
 
   regression-test:
     runs-on: self-hosted
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +49,7 @@ jobs:
           - { variant: 'handover64-tap-smp4', netdev: 'tap', smp: 4 }
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run TDX regression test (${{ matrix.variant }})
         uses: ./.github/actions/test
         with:
@@ -72,9 +62,6 @@ jobs:
 
   conformance-test:
     runs-on: self-hosted
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +76,7 @@ jobs:
           - { variant: 'tap-smp4', netdev: 'tap', smp: 4 }
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run TDX conformance test (${{ matrix.variant }}, ${{ matrix.suite }})
         uses: ./.github/actions/test
         with:
