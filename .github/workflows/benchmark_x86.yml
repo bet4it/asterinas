@@ -8,6 +8,7 @@ on:
 
 jobs:
   Benchmarks:
+    if: github.repository == 'asterinas/asterinas'
     runs-on: self-hosted
     strategy:
       matrix:
@@ -120,7 +121,7 @@ jobs:
   Results:
     runs-on: ubuntu-latest
     needs: Benchmarks
-    if: always()
+    if: always() && github.repository == 'asterinas/asterinas'
 
     steps:
       - uses: actions/checkout@v4
