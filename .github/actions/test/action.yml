@@ -80,7 +80,7 @@ runs:
         [[ "${{ matrix.id }}" == "lint" ]] && APP="check"
         [[ "${{ matrix.id }}" == "compile" ]] && APP="kernel"
         [[ "${{ matrix.id }}" == "usermode_test" ]] && APP="test"
-        [[ "${{ matrix.id }}" == "ktest" ]] && APP="ktest" && export NETDEV=tap
+        [[ "${{ matrix.id }}" == "ktest" ]] && APP="ktest"
         [[ -n "${{ inputs.arch }}" ]] && export TARGET_ARCH="${{ inputs.arch }}"
         
         echo "Executing: nix run .#$APP"
@@ -113,7 +113,7 @@ runs:
       if: ${{ inputs.auto_test == 'osdk' }}
       shell: bash
       run: |
-        [[ "${{ !contains(matrix.image, 'osdk') }}" == "true" ]] && nix run .#check-osdk --no-write-lock-file
+        nix run .#check-osdk --no-write-lock-file
         if [[ "${{ inputs.intel_tdx }}" == "true" ]]; then
           INTEL_TDX=1 nix run .#test-osdk --no-write-lock-file
         else

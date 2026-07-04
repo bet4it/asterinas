@@ -10,18 +10,15 @@ on:
 jobs:
   basic-test:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     strategy:
       matrix:
         id: ['lint', 'compile']
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run basic tests
         uses: ./.github/actions/test
         with:
           auto_test: 'general'
-          runs_on: 'ubuntu-latest'
           arch: 'loongarch64'

@@ -10,16 +10,6 @@ on:
 jobs:
   basic-test:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
     strategy:
       fail-fast: false
       matrix:
@@ -27,25 +17,19 @@ jobs:
     steps:
       - name: Free disk space
         # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+        run: sudo rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run basic tests
         uses: ./.github/actions/test
         with:
           auto_test: 'general'
-          runs_on: 'ubuntu-latest'
 
   osdk-test:
     runs-on: ubuntu-latest
-    container:
-      image: ${{ matrix.image }}
-      options: -v /dev:/dev --privileged
-    strategy:
-      fail-fast: false
-      matrix:
-        image: ['asterinas/asterinas:0.18.0-20260702', 'asterinas/osdk:0.18.0-20260702']
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run OSDK tests
         uses: ./.github/actions/test
         with:
@@ -54,9 +38,6 @@ jobs:
 
   boot-test:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +46,7 @@ jobs:
           - { variant: 'multiboot2-smp4', boot_protocol: 'multiboot', smp: 4 }
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run boot test (${{ matrix.variant }})
         uses: ./.github/actions/test
         with:
@@ -74,16 +56,6 @@ jobs:
 
   regression-test:
     runs-on: ubuntu-latest
-    container:
-      image: asterinas/asterinas:0.18.0-20260702
-      options: -v /dev:/dev --privileged
-      volumes:
-        # Map the following directories on the host into the container so that
-        # the container can remove them to save some precious disk space (~16GB),
-        # which is quite limited on free-tier Github runners.
-        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
-        - /usr/local/lib/android:/usr/local/lib/android
-        - /usr/share/dotnet:/usr/share/dotnet
     strategy:
       fail-fast: false
       matrix:
@@ -93,13 +65,14 @@ jobs:
     steps:
       - name: Free disk space
         # Remove unused packages from the host to save disk space.
-        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
+        run: sudo rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run regression test (${{ matrix.variant }})
         uses: ./.github/actions/test
         with:
           auto_test: 'regression'
-          release: ${{ !contains(matrix.release, 'false') }}
+          release: ${{ matrix.release != false }}
           smp: ${{ matrix.smp }}
           boot_protocol: ${{ matrix.boot_protocol || 'linux-efi-handover64' }}
 
@@ -140,10 +113,10 @@ jobs:
         uses: ./.github/actions/test
         with:
           auto_test: 'conformance'
-          release: ${{ !contains(matrix.release, 'false') }}
-          enable_kvm: ${{ !contains(matrix.enable_kvm, 'false') }}
+          release: ${{ matrix.release != false }}
+          enable_kvm: ${{ matrix.enable_kvm != false }}
           smp: ${{ matrix.smp }}
-          netdev: ${{ matrix.netdev || 'tap' }}
+          netdev: 'tap'
           scheme: ${{ matrix.scheme }}
           extra_blocklists: ${{ matrix.extra_blocklists }}
           conformance_test_suite: ${{ matrix.suite }}
@@ -158,14 +131,12 @@ jobs:
         include:
           - name: arm-cross-boot
             runs_on: ubuntu-24.04-arm
-            image: asterinas/asterinas:0.18.0-20260702
             auto_test: boot
             enable_kvm: false
     runs-on: ${{ matrix.runs_on }}
-    container:
-      image: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Run cross-compile tests (${{ matrix.name }})
         uses: ./.github/actions/test
         with:
