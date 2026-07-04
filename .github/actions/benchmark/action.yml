@@ -40,7 +40,8 @@ runs:
       if: ${{ inputs.task == 'benchmark' }}
       shell: bash
       run: |
-        make install_osdk
+        nix build .#cargoOsdk --out-link .nix-run/cargo-osdk
+        export PATH="$PWD/.nix-run/cargo-osdk/bin:$PATH"
         bash test/initramfs/src/benchmark/bench_linux_and_aster.sh "${{ matrix.benchmarks }}" "${{ inputs.platform }}"
         BENCHMARK_ARTIFACT=results_$(echo "${{ matrix.benchmarks }}" | tr '/' '-')
         echo "BENCHMARK_ARTIFACT=$BENCHMARK_ARTIFACT" >> $GITHUB_ENV

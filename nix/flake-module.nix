@@ -275,7 +275,6 @@
         case "$BOOT_PROTOCOL_VALUE" in
           linux-efi-handover64)
             OSDK_COMMON_ARGS+=(
-              --grub-mkrescue="${pkgs.grub2}/bin/grub-mkrescue"
               --grub-boot-protocol="linux"
             )
             ;;
@@ -399,6 +398,29 @@
           --argstr extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-} ''${DEV_TRUSTED_PUBLIC_KEY:-}" \
           --argstr version "$(cat VERSION)" \
           --out-link "$NIXOS_DIR/iso_image"
+      '';
+
+      buildNixosKernelForCachix = ''
+        export BOOT_PROTOCOL="''${BOOT_PROTOCOL:-linux-efi-handover64}"
+        ${ensureInitramfs}
+        ${configureOsdkArgs}
+        cd "$ASTERINAS_DIR/kernel"
+        cargo osdk build "''${OSDK_BUILD_ARGS[@]}"
+        OSDK_KERNEL_PATH="$CARGO_TARGET_DIR/osdk/iso_root/boot/aster-kernel-osdk-bin"
+        if [ ! -e "$OSDK_KERNEL_PATH" ]; then
+          echo "Error: cargo-osdk did not produce $OSDK_KERNEL_PATH." >&2
+          exit 1
+        fi
+        cd "$ASTERINAS_DIR"
+      '';
+
+      buildCachixClosure = ''
+        ${buildNixosKernelForCachix}
+        nix-build distro/cachix \
+          --arg aster-kernel-path "$OSDK_KERNEL_PATH" \
+          --option extra-substituters "''${RELEASE_SUBSTITUTER:-https://aster-nixos-release.cachix.org} ''${DEV_SUBSTITUTER:-https://aster-nixos-dev.cachix.org}" \
+          --option extra-trusted-public-keys "''${RELEASE_TRUSTED_PUBLIC_KEY:-aster-nixos-release.cachix.org-1:xB6U/f5ck5vGDJZ04kPp3zGpZ4Nro9X4+TSSMAETVFE=} ''${DEV_TRUSTED_PUBLIC_KEY:-aster-nixos-dev.cachix.org-1:xrCbE2flfliFTQCY/2HeJoT2tCO+5kMTZeLIUH9lnIA=}" \
+          --out-link cachix.list
       '';
 
       ensureInitramfs = ''
@@ -712,6 +734,42 @@
                 mdbook-mermaid install .
               fi
               mdbook build
+            '';
+
+          "api-docs" = mkApp "asterinas-api-docs"
+            "Build API documentation for published crates." ''
+              ${appPrelude}
+              cd "$ASTERINAS_DIR"
+              CRATES=(
+                ostd
+                osdk/deps/frame-allocator
+                osdk/deps/heap-allocator
+                osdk/deps/test-kernel
+              )
+              for crate in "''${CRATES[@]}"; do
+                (
+                  cd "$crate"
+                  RUSTDOCFLAGS="-Dwarnings" cargo osdk doc
+                )
+              done
+            '';
+
+          cachix = mkApp "asterinas-cachix"
+            "Build the Asterinas NixOS Cachix closure list." ''
+              ${appPrelude}
+              ${buildCachixClosure}
+            '';
+
+          "push-cachix" = mkApp "asterinas-push-cachix"
+            "Build and push the Asterinas NixOS Cachix closure list." ''
+              ${appPrelude}
+              ${buildCachixClosure}
+              if [ "''${USE_RELEASE_CACHE:-0}" = "1" ]; then
+                CACHIX_NAME="''${RELEASE_CACHIX_NAME:-aster-nixos-release}"
+              else
+                CACHIX_NAME="''${DEV_CACHIX_NAME:-aster-nixos-dev}"
+              fi
+              cachix push "$CACHIX_NAME" < cachix.list
             '';
 
           "check-osdk" = mkApp "asterinas-check-osdk"

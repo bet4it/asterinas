@@ -1,8 +1,10 @@
 { pkgs ? import <nixpkgs> { }, extra-substituters ? ""
-, extra-trusted-public-keys ? "", ... }:
+, extra-trusted-public-keys ? ""
+, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin
+, ... }:
 let
   installer = pkgs.callPackage ../aster_nixos_installer {
-    inherit extra-substituters extra-trusted-public-keys;
+    inherit extra-substituters extra-trusted-public-keys aster-kernel-path;
   };
   nixos = pkgs.nixos (import "${installer}/etc_nixos/configuration.nix");
   cachixPkgs = with nixos.pkgs;

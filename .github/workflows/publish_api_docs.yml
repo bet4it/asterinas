@@ -30,7 +30,7 @@ jobs:
         run: ./tools/github_workflows/publish_api_docs.sh --dry-run
 
       - name: Check API docs of all crates
-        run: make docs
+        run: nix run .#docs --no-write-lock-file
 
       - name: Build & Upload Nightly API Docs
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

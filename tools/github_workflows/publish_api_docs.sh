@@ -51,14 +51,12 @@ validate_parameter() {
 # Build documentation of all crates to publish
 build_api_docs() {
     cd "${ASTER_SRC_DIR}"
-    make install_osdk
-    # Crates depend on OSTD, including OSTD itself
-    CRATES="ostd osdk/deps/frame-allocator osdk/deps/heap-allocator osdk/deps/test-kernel"
-    for CRATE in $CRATES; do
-        pushd $CRATE
-        RUSTDOCFLAGS="-Dwarnings" cargo osdk doc
-        popd
-    done
+    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ASTER_SRC_DIR}/.nix-run/cargo-target}"
+    nix run .#api-docs --no-write-lock-file
+}
+
+api_docs_output_dir() {
+    echo "${CARGO_TARGET_DIR:-${ASTER_SRC_DIR}/.nix-run/cargo-target}/x86_64-unknown-none/doc"
 }
 
 # Git clone the API documentation repo
@@ -98,7 +96,7 @@ update_nightly_doc() {
     cd "${WORK_DIR}/${CLONED_REPO_DIR}"
     git checkout --orphan new_branch
     rm -rf *
-    cp -r ${ASTER_SRC_DIR}/target/x86_64-unknown-none/doc/* ./
+    cp -r "$(api_docs_output_dir)"/* ./
     generate_redirect_index_html "https://asterinas.github.io/api-docs-nightly/ostd"
     git add .
     git commit -am "Update nightly API docs"
@@ -114,7 +112,7 @@ update_release_doc() {
     VERSION=$(cat "${ASTER_SRC_DIR}/VERSION")
     git rm -rf --ignore-unmatch "${VERSION}"
     mkdir "${VERSION}"
-    cp -r ${ASTER_SRC_DIR}/target/x86_64-unknown-none/doc/* ${VERSION}/
+    cp -r "$(api_docs_output_dir)"/* ${VERSION}/
     generate_redirect_index_html "https://asterinas.github.io/api-docs/${VERSION}/ostd"
     git add .
     git commit -am "Update API docs to v${VERSION}"

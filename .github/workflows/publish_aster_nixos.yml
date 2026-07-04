@@ -27,9 +27,8 @@ jobs:
 
       - name: Build Asterinas NixOS patched packages and push to release cache
         run: |
-          make kernel BOOT_PROTOCOL=linux-efi-handover64
           export CACHIX_AUTH_TOKEN=${{ secrets.CACHIX_AUTH_TOKEN_FOR_RELEASE_CACHE }}
-          make push_cachix USE_RELEASE_CACHE=1
+          USE_RELEASE_CACHE=1 nix run .#push-cachix --no-write-lock-file
           echo "Push cachix succeeds!"
 
   create-github-release:
@@ -98,8 +97,8 @@ jobs:
           options: --privileged -v /dev:/dev -v ${{ github.workspace }}:/root/asterinas
           run: |
             export ASTER_BUILD_TIMESTAMP=`date '+%a %b %e %H:%M:%S %Z %Y'`
-            make iso RELEASE=1 AUTO_INSTALL=false ARCH=${{ matrix.arch }}
-            iso_path=$(realpath ./target/nixos/iso_image/iso/*.iso)
+            RELEASE=1 AUTO_INSTALL=false TARGET_ARCH=${{ matrix.arch }} nix run .#iso --no-write-lock-file
+            iso_path=$(realpath ./.nix-run/nixos/iso_image/iso/*.iso)
             echo "iso_path=$iso_path"
             cp $iso_path ./asterinas-nixos.iso
             echo "Building ISO succeeds"
