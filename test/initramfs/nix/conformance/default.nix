@@ -2,11 +2,7 @@
 }: rec {
   inherit testSuite;
   ltp = callPackage ./ltp.nix { };
-  # FIXME: Build gvisor syscall test with nix.
-  gvisor = builtins.path {
-    name = "gvisor-prebuilt";
-    path = builtins.getEnv "GVISOR_PREBUILT_DIR";
-  };
+  gvisor = callPackage ./gvisor.nix { };
   kselftest = callPackage ./kselftest.nix { };
 
   conformanceSrc = lib.fileset.toSource {
