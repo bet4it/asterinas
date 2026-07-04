@@ -66,30 +66,29 @@
         };
       }.${system} or null;
 
-      codexCli =
-        if codexPlatform == null then
-          null
-        else
-          pkgs.stdenvNoCC.mkDerivation {
-            pname = "codex-cli";
-            version = "0.142.3";
+      codexCli = if codexPlatform == null then
+        null
+      else
+        pkgs.stdenvNoCC.mkDerivation {
+          pname = "codex-cli";
+          version = "0.142.3";
 
-            src = pkgs.fetchurl {
-              url =
-                "https://registry.npmjs.org/@openai/codex/-/codex-0.142.3-${codexPlatform.package}.tgz";
-              inherit (codexPlatform) hash;
-            };
-
-            sourceRoot = "package";
-
-            installPhase = ''
-              runHook preInstall
-              mkdir -p "$out/lib/codex" "$out/bin"
-              cp -R vendor "$out/lib/codex/"
-              ln -s "$out/lib/codex/vendor/${codexPlatform.targetTriple}/bin/codex" "$out/bin/codex"
-              runHook postInstall
-            '';
+          src = pkgs.fetchurl {
+            url =
+              "https://registry.npmjs.org/@openai/codex/-/codex-0.142.3-${codexPlatform.package}.tgz";
+            inherit (codexPlatform) hash;
           };
+
+          sourceRoot = "package";
+
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out/lib/codex" "$out/bin"
+            cp -R vendor "$out/lib/codex/"
+            ln -s "$out/lib/codex/vendor/${codexPlatform.targetTriple}/bin/codex" "$out/bin/codex"
+            runHook postInstall
+          '';
+        };
 
       hostTools = (with pkgs; [
         bash
@@ -159,6 +158,50 @@
           meta.description = description;
         };
 
+      ovmfPrelude = ''
+        ovmf_firmware_dir="${pkgs.OVMF.fd}"
+
+        find_ovmf_file() {
+          for ovmf_file in "$@"; do
+            if [ -e "$ovmf_file" ]; then
+              printf '%s\n' "$ovmf_file"
+              return 0
+            fi
+          done
+          return 1
+        }
+
+        if [ -z "''${OVMF_CODE:-}" ]; then
+          OVMF_CODE="$(find_ovmf_file \
+            "$ovmf_firmware_dir/FV/OVMF.fd" \
+            "$ovmf_firmware_dir/FV/OVMF_CODE.fd" \
+            "$ovmf_firmware_dir/FV/OVMF_CODE_4M.fd" \
+            "$ovmf_firmware_dir/OVMF.fd" \
+          )" || {
+            echo "Error: unable to find OVMF firmware code in $ovmf_firmware_dir." >&2
+            exit 1
+          }
+          export OVMF_CODE
+        fi
+
+        export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
+        export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
+
+        if [ ! -e "$OVMF_VARS" ]; then
+          ovmf_vars_template="$(find_ovmf_file \
+            "$ovmf_firmware_dir/FV/OVMF_VARS.fd" \
+            "$ovmf_firmware_dir/FV/OVMF_VARS_4M.fd" \
+            "$ovmf_firmware_dir/OVMF_VARS.fd" \
+          )" || ovmf_vars_template=""
+
+          if [ -n "$ovmf_vars_template" ]; then
+            mkdir -p "$(dirname "$OVMF_VARS")"
+            cp "$ovmf_vars_template" "$OVMF_VARS"
+            chmod u+w "$OVMF_VARS"
+          fi
+        fi
+      '';
+
       appPrelude = ''
         set -euo pipefail
 
@@ -182,15 +225,6 @@
         export NIXOS_DIR="''${NIXOS_DIR:-$NIX_RUN_DIR/nixos}"
         export QEMU_LOG="''${QEMU_LOG:-$NIX_RUN_DIR/qemu.log}"
         export QEMU_SERIAL_LOG="''${QEMU_SERIAL_LOG:-$NIX_RUN_DIR/qemu-serial.log}"
-        export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
-        export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
-        export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
-
-        if [ ! -e "$OVMF_VARS" ]; then
-          mkdir -p "$(dirname "$OVMF_VARS")"
-          cp "${pkgs.OVMF.fd}/FV/OVMF_VARS.fd" "$OVMF_VARS"
-          chmod u+w "$OVMF_VARS"
-        fi
 
         target_nix_system() {
           case "$1" in
@@ -202,6 +236,7 @@
           esac
         }
 
+        ${ovmfPrelude}
       '';
 
       configureAutoTest = ''
@@ -590,14 +625,7 @@
           export OSDK_LOCAL_DEV_ROOT="''${OSDK_LOCAL_DEV_ROOT:-$PWD}"
           export VDSO_LIBRARY_DIR="''${VDSO_LIBRARY_DIR:-${inputs.linux-vdso}}"
           export NIX_RUN_DIR="''${NIX_RUN_DIR:-$PWD/.nix-run}"
-          export OVMF_CODE="''${OVMF_CODE:-${pkgs.OVMF.fd}/FV/OVMF.fd}"
-          export OVMF_VARS="''${OVMF_VARS:-$NIX_RUN_DIR/OVMF_VARS.fd}"
-          export MICROVM_OVMF="''${MICROVM_OVMF:-$OVMF_CODE}"
-          if [ ! -e "$OVMF_VARS" ]; then
-            mkdir -p "$(dirname "$OVMF_VARS")"
-            cp "${pkgs.OVMF.fd}/FV/OVMF_VARS.fd" "$OVMF_VARS"
-            chmod u+w "$OVMF_VARS"
-          fi
+          ${ovmfPrelude}
           echo "Asterinas dev shell loaded."
           echo "  Rust: $(rustc --version)"
           echo "  cargo-osdk: $(cargo osdk --version)"
@@ -750,8 +778,8 @@
               fi
             '';
 
-          check = mkApp "asterinas-check"
-            "Run the Asterinas development checks." ''
+          check =
+            mkApp "asterinas-check" "Run the Asterinas development checks." ''
               ${appPrelude}
               cd "$ASTERINAS_DIR"
               ./tools/format_all.sh --check
