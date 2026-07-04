@@ -6,6 +6,11 @@
         overlays = [ inputs.rust-overlay.overlays.default ];
       };
 
+      x86Pkgs = import inputs.nixpkgs {
+        system = "x86_64-linux";
+        overlays = [ inputs.rust-overlay.overlays.default ];
+      };
+
       version = lib.removeSuffix "\n" (builtins.readFile ../VERSION);
 
       rustToolchain = pkgs.rust-bin.nightly."2026-04-03".complete.override {
@@ -51,6 +56,14 @@
         '';
 
         env.OSDK_LOCAL_DEV = "1";
+      };
+
+      rustStrip = pkgs.writeShellApplication {
+        name = "rust-strip";
+        runtimeInputs = [ pkgs.llvmPackages.bintools-unwrapped ];
+        text = ''
+          exec llvm-strip "$@"
+        '';
       };
 
       codexPlatform = {
@@ -127,6 +140,7 @@
         pkg-config
         (python3.withPackages (pythonPackages: [ pythonPackages.pyyaml ]))
         qemu
+        rustStrip
         rustToolchain
         socat
         strace
@@ -159,7 +173,7 @@
         };
 
       ovmfPrelude = ''
-        ovmf_firmware_dir="${pkgs.OVMF.fd}"
+        ovmf_firmware_dir="${x86Pkgs.OVMF.fd}"
 
         find_ovmf_file() {
           for ovmf_file in "$@"; do
