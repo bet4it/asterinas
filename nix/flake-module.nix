@@ -751,7 +751,7 @@
             '';
 
           check = mkApp "asterinas-check"
-            "Run the development checks previously covered by make check." ''
+            "Run the Asterinas development checks." ''
               ${appPrelude}
               cd "$ASTERINAS_DIR"
               ./tools/format_all.sh --check
