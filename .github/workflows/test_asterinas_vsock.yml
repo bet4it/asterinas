@@ -14,12 +14,13 @@ jobs:
       - name: Run Vsock Server on Host
         id: host_vsock_server
         run: |
+          nix develop --no-write-lock-file -c bash -s <<'EOF'
             sudo modprobe vhost_vsock
-            sudo apt-get install socat
             echo "Run vsock server on host...."
             server_cmd="while read cmd; do result=\$(eval \"\$cmd\" 2>&1); echo \"\$result\"; done"
             socat -ddd VSOCK-LISTEN:1234,fork \
               SYSTEM:"$server_cmd" &
+          EOF
       - name: Run Vsock Client and Server on Guest
         id: guest_vsock_client_server
         run: |
@@ -28,6 +29,8 @@ jobs:
       - name: Run Vsock Client on Host
         id: host_vsock_client
         run: |
+          nix develop --no-write-lock-file -c bash -s <<'EOF'
           sleep 6m
           echo "Run vsock client on host...."
           echo "Hello from host" | socat -dd - vsock-connect:3:4321
+          EOF

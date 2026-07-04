@@ -129,6 +129,7 @@
         (python3.withPackages (pythonPackages: [ pythonPackages.pyyaml ]))
         qemu
         rustToolchain
+        socat
         strace
         typos
         util-linux

@@ -30,7 +30,7 @@ runs:
           git config --global http.version HTTP/1.1
         elif [[ "${{ inputs.task }}" == "result" ]]; then
           echo "Setting up environment for result processing..."
-          sudo apt-get update && sudo apt-get install -y yq jq
+          nix develop --no-write-lock-file -c bash -c 'jq --version && yq --version'
         else
           echo "Unknown task: ${{ inputs.task }}"
           exit 1
@@ -67,6 +67,7 @@ runs:
       if: ${{ inputs.task == 'result' }}
       shell: bash
       run: |
+        nix develop --no-write-lock-file -c bash -s <<'EOF'
         mkdir -p configs
         BENCHMARK_LIST=$(ls results/result_*.json | sed 's/.*result_//' | sed 's/\.json//' | jq -R -s -c 'split("\n")[:-1]')
         echo "Processing benchmarks: $BENCHMARK_LIST"
@@ -132,6 +133,7 @@ runs:
 
           echo "Generated config file $CONFIG_FILE"
         done
+        EOF
 
     - name: Set up benchmark git auth
       if: ${{ inputs.task == 'result' }}

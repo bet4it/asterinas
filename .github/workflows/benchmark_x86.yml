@@ -124,6 +124,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nix
       - name: Store benchmark results
         uses: ./.github/actions/benchmark
         with:
