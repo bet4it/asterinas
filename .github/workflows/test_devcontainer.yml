@@ -1,32 +1,35 @@
-name: Test devcontainer
+name: Test Nix development environment
 
 on:
   pull_request:
     paths:
-      - ".devcontainer/**"
+      - ".github/workflows/test_devcontainer.yml"
+      - ".github/actions/setup-nix/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+      - "rust-toolchain.toml"
   push:
     branches: [main]
     paths:
-      - ".devcontainer/**"
-  workflow_run:
-    workflows: ["Publish Docker images"]
-    types:
-      - completed
+      - ".github/workflows/test_devcontainer.yml"
+      - ".github/actions/setup-nix/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+      - "rust-toolchain.toml"
 
 jobs:
-  test-devcontainer:
-    # DO NOT run when the "Publish Docker images" workflow failed.
-    if: ${{ github.event_name != 'workflow_run'
-      || github.event.workflow_run.conclusion == 'success' }}
+  test-nix-dev-env:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify image tag matches DOCKER_IMAGE_VERSION
+      - uses: ./.github/actions/setup-nix
+      - name: Verify Nix development shell
         run: |
-          EXPECTED=$(cat DOCKER_IMAGE_VERSION)
-          grep -q "asterinas/asterinas:${EXPECTED}" .devcontainer/devcontainer.json \
-            || { echo "devcontainer.json image doesn't match DOCKER_IMAGE_VERSION"; exit 1; }
-      - name: Build and verify dev container
-        uses: devcontainers/ci@v0.3
-        with:
-          runCmd: rustc --version && cargo --version && make --version
+          nix develop --no-write-lock-file -c bash -lc '
+            rustc --version
+            cargo --version
+            cargo osdk --version
+            qemu-system-x86_64 --version
+          '
