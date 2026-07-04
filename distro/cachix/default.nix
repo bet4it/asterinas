@@ -1,7 +1,7 @@
 { pkgs ? import <nixpkgs> { }, extra-substituters ? ""
 , extra-trusted-public-keys ? ""
-, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin
-, ... }:
+, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin, ...
+}:
 let
   installer = pkgs.callPackage ../aster_nixos_installer {
     inherit extra-substituters extra-trusted-public-keys aster-kernel-path;

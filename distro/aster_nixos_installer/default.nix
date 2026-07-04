@@ -1,7 +1,8 @@
 { disable-systemd ? "false", stage-2-hook ? "/bin/sh -l", log-level ? "error"
 , console ? "hvc0", extra-substituters ? "", extra-trusted-public-keys ? ""
 , config-file-name ? "configuration.nix", target_platform ? "x86_64-linux"
-, config-path ? "", aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin
+, config-path ? ""
+, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin
 , pkgs ? import <nixpkgs> { } }:
 let
   aster-kernel = builtins.path {

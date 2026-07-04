@@ -2,8 +2,8 @@
 , config-file-name ? "configuration.nix", extra-trusted-public-keys ? ""
 , target_platform ? "x86_64-linux", version ? "", config-path ? ""
 , console ? "hvc0", installerConsole ? "hvc0"
-, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin
-, ... }:
+, aster-kernel-path ? ../../target/osdk/iso_root/boot/aster-kernel-osdk-bin, ...
+}:
 let
   installer = pkgs.callPackage ../aster_nixos_installer {
     inherit extra-substituters extra-trusted-public-keys config-file-name
@@ -17,8 +17,8 @@ let
 
     system.nixos.distroName = "Asterinas NixOS";
     system.nixos.label = "${version}";
-    boot.kernelParams =
-      pkgs.lib.optionals (installerConsole == "ttyS0") [ "console=ttyS0,115200n8" ];
+    boot.kernelParams = pkgs.lib.optionals (installerConsole == "ttyS0")
+      [ "console=ttyS0,115200n8" ];
     isoImage.appendToMenuLabel = " Installer";
 
     services.getty.autologinUser = pkgs.lib.mkForce "root";
