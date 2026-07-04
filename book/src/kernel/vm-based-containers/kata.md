@@ -237,20 +237,20 @@ so it assumes you entered the Kata-ready environment through the
 Build the kernel first:
 
 ```bash
-(cd /root/asterinas && make kernel BOOT_METHOD=qemu-direct)
+(cd /root/asterinas && BOOT_METHOD=qemu-direct nix run .#kernel)
 ```
 
 Verify that the command produced the kernel image:
 
 ```bash
-ls /root/asterinas/target/osdk/aster-kernel-osdk-bin.qemu_elf
+ls /root/asterinas/.nix-run/cargo-target/osdk/aster-kernel-osdk-bin.qemu_elf
 ```
 
 Pass that path to `tools/kata/kata_env.sh install`:
 
 ```bash
 tools/kata/kata_env.sh install \
-    --kernel /root/asterinas/target/osdk/aster-kernel-osdk-bin.qemu_elf
+    --kernel /root/asterinas/.nix-run/cargo-target/osdk/aster-kernel-osdk-bin.qemu_elf
 ```
 
 Configuring a local kernel re-runs `tools/kata/kata_env.sh install`

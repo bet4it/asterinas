@@ -70,11 +70,11 @@ start an Asterinas instance and run the GDB interactive shell in another termina
 Start a GDB-enabled VM of Asterinas with OSDK and wait for debugging connection:
 
 ```bash
-make gdb_server
+nix run .#gdb-server
 ```
 
-The server will listen at the default address specified in `Makefile`, i.e., a local TCP port `:1234`.
-Change the address in `Makefile` for your convenience,
+The server will listen at the default local TCP port `:1234`.
+Set `GDB_TCP_PORT` to use another port,
 and check `cargo osdk run -h` for more details about the address.
 
 Two options are provided to interact with the debug server.
@@ -82,11 +82,11 @@ Two options are provided to interact with the debug server.
 - A GDB client: start a GDB client in another terminal.
 
     ```bash
-    make gdb_client
+    nix run .#gdb-client
     ```
 
 - VS Code: [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) extension is required.
-After starting a debug server with OSDK from the shell with `make gdb_server`,
+After starting a debug server with OSDK from the shell with `nix run .#gdb-server`,
 a temporary `launch.json` is generated under `.vscode`.
 Your previous launch configs will be restored after the server is down.
 Press `F5`(Run and Debug) to start a debug session via VS Code. 

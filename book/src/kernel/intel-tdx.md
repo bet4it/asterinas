@@ -89,19 +89,18 @@ which are not accessible when the TD is non-debuggable.
 Start Asterinas in a GDB-enabled TD and wait for debugging connection:
 
 ```bash
-make gdb_server INTEL_TDX=1
+INTEL_TDX=1 nix run .#gdb-server
 ```
 
 Behind the scene, this command adds `debug=on` configuration to the QEMU parameters
 to enable TD debuggable mode.
 
-The server will listen at the default address specified in `Makefile`,
-i.e., a local TCP port `:1234`.
+The server will listen at the default local TCP port `:1234`.
 
 Start a GDB client in another terminal:
 
 ```bash
-make gdb_client INTEL_TDX=1
+INTEL_TDX=1 nix run .#gdb-client
 ```
 
 Note that you must use hardware assisted breakpoints

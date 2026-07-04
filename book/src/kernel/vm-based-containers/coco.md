@@ -237,17 +237,17 @@ Build the kernel and verify the output images:
 
 ```bash
 # Build the regular guest kernel
-cd /root/asterinas && make kernel BOOT_METHOD=qemu-direct
+cd /root/asterinas && BOOT_METHOD=qemu-direct nix run .#kernel
 
 # Verify the regular build output
-ls /root/asterinas/target/osdk/aster-kernel-osdk-bin.qemu_elf
+ls /root/asterinas/.nix-run/cargo-target/osdk/aster-kernel-osdk-bin.qemu_elf
 
 # Build the TDX guest kernel (only needed for the CVM path)
-cd /root/asterinas && make kernel BOOT_METHOD=qemu-direct INTEL_TDX=1
+cd /root/asterinas && BOOT_METHOD=qemu-direct INTEL_TDX=1 nix run .#kernel
 
 # Verify the TDX build output
 # (Note that the TDX kernel uses a bzImage format without the `.qemu_elf` extension.)
-ls /root/asterinas/target/osdk/aster-kernel-osdk-bin
+ls /root/asterinas/.nix-run/cargo-target/osdk/aster-kernel-osdk-bin
 ```
 
 Then adjust the CoCo runtime configuration to point to the locally built Asterinas kernel.

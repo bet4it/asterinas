@@ -32,7 +32,8 @@ Most tests in this directory are compiled and packaged using [Nix](https://nixos
 
 ### Conformance Test Suite - gVisor Exception
 
-While most tests rely on `Nix` for compilation, the `gvisor` conformance test suite currently cannot be built with `Nix`. Instead, the `gvisor` tests are compiled in the Docker image. For details, refer to `tools/docker/Dockerfile`.
+The conformance suites are built and packaged through the Nix expressions under
+`test/initramfs/nix/conformance`.
 
 ### Linux Kernel Selftest (kselftest)
 
@@ -45,7 +46,7 @@ on x86_64 hosts.
 Invoke via:
 
 ```bash
-make run_kernel AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=kselftest
+AUTO_TEST=conformance CONFORMANCE_TEST_SUITE=kselftest nix run .#run-kernel
 ```
 
 **Bumping the Linux version.** Edit `version` in
@@ -63,9 +64,9 @@ entry format.
 The test suite supports building for multiple architectures, including `x86_64` and `riscv64`. You can specify the desired architecture by running:
 
 ```bash
-make kernel TARGET_ARCH=x86_64
+TARGET_ARCH=x86_64 nix run .#kernel
 # or
-make kernel TARGET_ARCH=riscv64
+TARGET_ARCH=riscv64 nix run .#kernel
 ```
 
 The build artifacts (initramfs) can be found in the `test/initramfs/build` directory after the compilation.
@@ -89,7 +90,8 @@ The following benchmarks are currently supported:
 
 All benchmarks except `sysbench` support both `x86_64` and `riscv64` architectures.
 
-These benchmarks are precompiled and packaged into the Docker image for convenience. Refer to `tools/docker/nix/Dockerfile` for details.
+These benchmarks are packaged through the Nix expressions under
+`test/initramfs/nix/benchmark`.
 
 ## Adding New Benchmarks
 

@@ -67,6 +67,7 @@
         file
         findutils
         gawk
+        gdb
         git
         gnumake
         gnused
@@ -594,6 +595,53 @@
               cargo osdk run "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}"
             '';
 
+          "gdb-server" = mkApp "asterinas-gdb-server"
+            "Run the Asterinas kernel with a GDB server." ''
+              ${appPrelude}
+              ${configureAutoTest}
+              ${ensureInitramfs}
+              ${configureOsdkArgs}
+              cd "$ASTERINAS_DIR/kernel"
+              cargo osdk run "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}" \
+                --gdb-server "wait-client,vscode,addr=:''${GDB_TCP_PORT:-1234}"
+            '';
+
+          "gdb-client" = mkApp "asterinas-gdb-client"
+            "Attach GDB to an Asterinas GDB server." ''
+              ${appPrelude}
+              ${configureAutoTest}
+              ${ensureInitramfs}
+              ${configureOsdkArgs}
+              cd "$ASTERINAS_DIR/kernel"
+              cargo osdk debug "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}" \
+                --remote ":''${GDB_TCP_PORT:-1234}"
+            '';
+
+          "profile-server" = mkApp "asterinas-profile-server"
+            "Run the Asterinas kernel with a GDB server for profiling." ''
+              ${appPrelude}
+              ${configureAutoTest}
+              ${ensureInitramfs}
+              ${configureOsdkArgs}
+              cd "$ASTERINAS_DIR/kernel"
+              cargo osdk run "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}" \
+                --gdb-server "addr=:''${GDB_TCP_PORT:-1234}"
+            '';
+
+          "profile-client" = mkApp "asterinas-profile-client"
+            "Profile an Asterinas GDB server." ''
+              ${appPrelude}
+              ${configureAutoTest}
+              ${ensureInitramfs}
+              ${configureOsdkArgs}
+              cd "$ASTERINAS_DIR/kernel"
+              cargo osdk profile "''${OSDK_BUILD_ARGS[@]}" "''${EXTRA_OSDK_ARGS[@]}" \
+                --remote ":''${GDB_TCP_PORT:-1234}" \
+                --samples "''${GDB_PROFILE_COUNT:-200}" \
+                --interval "''${GDB_PROFILE_INTERVAL:-0.1}" \
+                --format "''${GDB_PROFILE_FORMAT:-flame-graph}"
+            '';
+
           iso =
             mkApp "asterinas-iso" "Build the Asterinas NixOS installer ISO." ''
               ${appPrelude}
@@ -831,6 +879,10 @@
         run_iso = apps."run-iso";
         nixos = apps."install-nixos";
         run_nixos = apps."run-nixos";
+        gdb_server = apps."gdb-server";
+        gdb_client = apps."gdb-client";
+        profile_server = apps."profile-server";
+        profile_client = apps."profile-client";
         check_osdk = apps."check-osdk";
         test_osdk = apps."test-osdk";
         validate_scml = apps."validate-scml";

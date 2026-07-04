@@ -105,45 +105,45 @@ The following commands should be run under the project root.
 
 ```bash
 # Build NixOS image for a test suite
-make nixos NIXOS_TEST_SUITE=my-test
+NIXOS_TEST_SUITE=my-test nix run .#install-nixos
 
 # Or build using ISO installer workflow
-make iso NIXOS_TEST_SUITE=my-test
-make run_iso
+NIXOS_TEST_SUITE=my-test nix run .#iso
+nix run .#run-iso
 ```
 
 ### Run Tests
 
 ```bash
 # Run all tests in the suite
-make run_nixos NIXOS_TEST_SUITE=my-test
+NIXOS_TEST_SUITE=my-test nix run .#run-nixos
 
 # Run a specific test case
-make run_nixos NIXOS_TEST_SUITE=my-test NIXOS_TEST_CASE=echo_print_message
+NIXOS_TEST_SUITE=my-test NIXOS_TEST_CASE=echo_print_message nix run .#run-nixos
 
 # Customize timeout with units (default: 10min)
-make run_nixos NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=10min    # 10 minutes
-make run_nixos NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=600s   # 600 seconds
-make run_nixos NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=600000ms  # 600000 milliseconds
+NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=10min nix run .#run-nixos    # 10 minutes
+NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=600s nix run .#run-nixos   # 600 seconds
+NIXOS_TEST_SUITE=my-test NIXOS_TEST_TIMEOUT=600000ms nix run .#run-nixos  # 600000 milliseconds
 ```
 
 ### Complete Workflow Examples
 
 ```bash
 # Quick test
-make nixos NIXOS_TEST_SUITE=my-test && make run_nixos NIXOS_TEST_SUITE=my-test
+NIXOS_TEST_SUITE=my-test nix run .#install-nixos && NIXOS_TEST_SUITE=my-test nix run .#run-nixos
 
 # Test with ISO installer
-make iso NIXOS_TEST_SUITE=my-test && make run_iso && make run_nixos NIXOS_TEST_SUITE=my-test
+NIXOS_TEST_SUITE=my-test nix run .#iso && nix run .#run-iso && NIXOS_TEST_SUITE=my-test nix run .#run-nixos
 
 # Run specific test with custom timeout (10 minutes)
-make nixos NIXOS_TEST_SUITE=containerization-and-virtualization
-make run_nixos NIXOS_TEST_SUITE=containerization-and-virtualization NIXOS_TEST_CASE=podman_run_alpine_container NIXOS_TEST_TIMEOUT=10min
+NIXOS_TEST_SUITE=containerization-and-virtualization nix run .#install-nixos
+NIXOS_TEST_SUITE=containerization-and-virtualization NIXOS_TEST_CASE=podman_run_alpine_container NIXOS_TEST_TIMEOUT=10min nix run .#run-nixos
 ```
 
 ## Variables
 
-Make variables:
+Environment variables:
 - **`NIXOS_TEST_SUITE`**: Name of the test suite to run (required for test mode)
 - **`NIXOS_TEST_CASE`**: Specific test case to run (optional, runs all if not specified)
 

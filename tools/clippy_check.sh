@@ -16,7 +16,7 @@ Usage:
 
   [OSDK_TARGET_ARCH=x86_64|riscv64|loongarch64] \
   ./tools/clippy_check.sh workspace
-      Runs the workspace clippy checks used by `make check`.
+      Runs the workspace clippy checks used by `nix run .#check`.
       This checks:
         - workspace `default-members` with `cargo osdk clippy`
         - non-default workspace members with `cargo clippy --all-targets`
