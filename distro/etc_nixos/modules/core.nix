@@ -95,8 +95,9 @@ in {
   '';
   system.activationScripts.modprobe = lib.mkForce "";
 
-  nix.nixPath = options.nix.nixPath.default
-    ++ [ "nixpkgs-overlays=/etc/nixos/overlays" ];
+  nix.nixPath = [ "nixpkgs=${pkgs.path}" ]
+    ++ builtins.filter (entry: !(lib.hasPrefix "nixpkgs=" entry))
+    options.nix.nixPath.default ++ [ "nixpkgs-overlays=/etc/nixos/overlays" ];
   nix.settings = {
     filter-syscalls = false;
     require-sigs = false;
