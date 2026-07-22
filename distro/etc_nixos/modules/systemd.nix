@@ -6,6 +6,7 @@
   # TODO: The following services currently do not work and
   # may affect systemd startup or cause performance issues.
   # Enable them after they can run successfully.
+  networking.resolvconf.enable = false;
   systemd.coredump.enable = false;
   systemd.oomd.enable = false;
   systemd.services.logrotate.enable = false;
@@ -35,8 +36,8 @@
       "autovt@tty6.service"
     ];
 
-  systemd.extraConfig = ''
-    LogLevel=crit
-    ShowStatus=no
-  '';
+  systemd.settings.Manager = {
+    LogLevel = "crit";
+    ShowStatus = "no";
+  };
 }
