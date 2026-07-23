@@ -12,6 +12,8 @@ pub type SetTermiosFlush = ioc!(TCSETSF,    0x5404,     InData<CTermios>);
 
 pub type GetTermios2     = ioc!(TCGETS2,    b'T', 0x2A, OutData<CTermios2>);
 pub type SetTermios2     = ioc!(TCSETS2,    b'T', 0x2B, InData<CTermios2>);
+pub type SetTermios2Wait  = ioc!(TCSETSW2,  b'T', 0x2C, InData<CTermios2>);
+pub type SetTermios2Flush = ioc!(TCSETSF2,  b'T', 0x2D, InData<CTermios2>);
 
 pub type GetWinSize      = ioc!(TIOCGWINSZ, 0x5413,     OutData<CWinSize>);
 pub type SetWinSize      = ioc!(TIOCSWINSZ, 0x5414,     InData<CWinSize>);
