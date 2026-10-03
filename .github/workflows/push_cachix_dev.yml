@@ -17,12 +17,18 @@ on:
 
 jobs:
   push-pkgs:
-    runs-on: ubuntu-4-cores-150GB-ssd
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'ubuntu-4-cores-150GB-ssd' }}
     container:
       image: asterinas/kernel-dev:0.18.1-20260926
       options: -v /dev:/dev --privileged
+      volumes:
+        - /usr/lib/google-cloud-sdk:/usr/lib/google-cloud-sdk
+        - /usr/local/lib/android:/usr/local/lib/android
+        - /usr/share/dotnet:/usr/share/dotnet
     timeout-minutes: 60
     steps:
+      - name: Free disk space
+        run: rm -rf /usr/lib/google-cloud-sdk/* /usr/local/lib/android/* /usr/share/dotnet/*
       - uses: actions/checkout@v4
 
       - name: Modify configuration.nix to include xfce and podman
